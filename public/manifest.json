@@ -1,0 +1,9 @@
+{
+  "name": "All In Basketball Training",
+  "short_name": "All In",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0E0F11",
+  "theme_color": "#FF5C1A",
+  "icons": [{ "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }]
+}

@@ -1,0 +1,101 @@
+import { NextResponse } from "next/server";
+import type Stripe from "stripe";
+import { stripe } from "@/lib/stripe";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { Tier } from "@/lib/tiers";
+
+// All In includes 2 coach film reviews per month, granted on each paid invoice.
+const ALLIN_MONTHLY_CREDITS = 2;
+
+function planFromPrice(priceId: string | undefined): Tier {
+  if (priceId === process.env.STRIPE_PRICE_ALLIN) return "allin";
+  if (priceId === process.env.STRIPE_PRICE_MEMBER) return "member";
+  return "free";
+}
+
+async function userIdFromCustomer(customerId: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("subscriptions")
+    .select("user_id").eq("stripe_customer_id", customerId).maybeSingle();
+  if (data?.user_id) return data.user_id;
+  const customer = await stripe.customers.retrieve(customerId);
+  if (!customer.deleted && customer.metadata?.supabase_user_id) {
+    return customer.metadata.supabase_user_id;
+  }
+  return null;
+}
+
+async function addCredits(userId: string, amount: number) {
+  const admin = createAdminClient();
+  const { data: row } = await admin.from("review_credits")
+    .select("balance").eq("user_id", userId).maybeSingle();
+  if (row) {
+    await admin.from("review_credits").update({ balance: row.balance + amount }).eq("user_id", userId);
+  } else {
+    await admin.from("review_credits").insert({ user_id: userId, balance: amount });
+  }
+}
+
+async function syncSubscription(sub: Stripe.Subscription) {
+  const admin = createAdminClient();
+  const userId = await userIdFromCustomer(sub.customer as string);
+  if (!userId) return;
+
+  const priceId = sub.items.data[0]?.price.id;
+  const active = sub.status === "active" || sub.status === "trialing";
+  const plan: Tier = active ? planFromPrice(priceId) : "free";
+
+  await admin.from("subscriptions").upsert({
+    user_id: userId,
+    stripe_customer_id: sub.customer as string,
+    stripe_subscription_id: sub.id,
+    plan,
+    status: sub.status,
+    current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+  });
+  await admin.from("profiles").update({ tier: plan }).eq("id", userId);
+}
+
+export async function POST(request: Request) {
+  const body = await request.text();
+  const signature = request.headers.get("stripe-signature");
+  if (!signature) return NextResponse.json({ error: "Missing signature" }, { status: 400 });
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
+  } catch {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  }
+
+  switch (event.type) {
+    case "checkout.session.completed": {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const userId = session.metadata?.supabase_user_id ?? session.client_reference_id;
+      // single review credit purchase
+      if (session.mode === "payment" && session.metadata?.plan === "review_credit" && userId) {
+        await addCredits(userId, 1);
+      }
+      // subscriptions are handled by customer.subscription.* below
+      break;
+    }
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted": {
+      await syncSubscription(event.data.object as Stripe.Subscription);
+      break;
+    }
+    case "invoice.paid": {
+      // grant monthly All In credits on every paid billing cycle
+      const invoice = event.data.object as Stripe.Invoice;
+      const priceId = invoice.lines.data[0]?.price?.id;
+      if (priceId === process.env.STRIPE_PRICE_ALLIN && invoice.customer) {
+        const userId = await userIdFromCustomer(invoice.customer as string);
+        if (userId) await addCredits(userId, ALLIN_MONTHLY_CREDITS);
+      }
+      break;
+    }
+  }
+
+  return NextResponse.json({ received: true });
+}

@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-asphalt text-chalk font-body antialiased;
+}
+
+.display {
+  @apply font-display uppercase tracking-wide;
+}
+
+/* scoreboard numerals */
+.score {
+  @apply font-display tabular-nums tracking-tight;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-card px-5 py-3 font-semibold
+    transition-colors disabled:opacity-50 disabled:pointer-events-none;
+}
+.btn-game { @apply btn bg-game text-asphalt hover:bg-[#ff7a42]; }
+.btn-ghost { @apply btn border border-line text-chalk hover:border-game hover:text-game; }
+
+.card { @apply bg-surface border border-line rounded-card; }
+.input {
+  @apply w-full rounded-card bg-raised border border-line px-4 py-3 text-chalk
+    placeholder:text-muted focus:outline-none focus:border-game;
+}
+.label { @apply block text-sm text-muted mb-1.5; }
+
+/* court paint texture line under headers */
+.baseline { @apply border-b border-line pb-3; }
+
+:focus-visible { outline: 2px solid #FF5C1A; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
