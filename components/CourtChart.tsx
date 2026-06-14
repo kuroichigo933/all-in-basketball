@@ -44,31 +44,36 @@ export default function CourtChart({
         const s = stats[z.id];
         const pct = s && s.attempts > 0 ? s.makes / s.attempts : null;
         const isSel = selected === z.id;
+        const handleSelect = interactive ? () => onSelect!(z.id) : undefined;
         return (
-          <g key={z.id}>
+          <g
+            key={z.id}
+            onClick={handleSelect}
+            onKeyDown={interactive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect!(z.id); } } : undefined}
+            role={interactive ? "button" : undefined}
+            aria-label={z.label}
+            tabIndex={interactive ? 0 : undefined}
+            style={interactive ? { cursor: "pointer" } : undefined}
+          >
             <path
               d={z.d}
               fill={interactive ? (isSel ? "#FF5C1A" : "#1E2024") : heat(pct)}
               fillOpacity={interactive ? 1 : pct === null ? 1 : 0.85}
               stroke={isSel ? "#FF5C1A" : "#2A2C31"}
               strokeWidth="2"
-              className={interactive ? "cursor-pointer transition-opacity hover:opacity-80" : ""}
-              onClick={interactive ? () => onSelect!(z.id) : undefined}
-              role={interactive ? "button" : undefined}
-              aria-label={z.label}
-              tabIndex={interactive ? 0 : undefined}
-              onKeyDown={interactive ? (e) => { if (e.key === "Enter" || e.key === " ") onSelect!(z.id); } : undefined}
+              pointerEvents={interactive ? "all" : undefined}
+              className={interactive ? "transition-opacity hover:opacity-80" : ""}
             />
             {!interactive && s && s.attempts > 0 && (
-              <text x={z.lx} y={z.ly} textAnchor="middle" fill="#0E0F11" fontSize="15" fontWeight="700">
+              <text x={z.lx} y={z.ly} textAnchor="middle" fill="#0E0F11" fontSize="15" fontWeight="700" pointerEvents="none">
                 {Math.round((s.makes / s.attempts) * 100)}%
               </text>
             )}
           </g>
         );
       })}
-      {/* court lines on top */}
-      <g stroke="#F4F2ED" strokeOpacity="0.35" strokeWidth="2.5" fill="none">
+      {/* court lines on top — non-interactive so they don't swallow clicks */}
+      <g stroke="#F4F2ED" strokeOpacity="0.35" strokeWidth="2.5" fill="none" pointerEvents="none">
         <rect x="170" y="10" width="160" height="220" />
         <circle cx="250" cy="230" r="58" />
         <path d="M70 10 V230 Q250 470 430 230 V10" />

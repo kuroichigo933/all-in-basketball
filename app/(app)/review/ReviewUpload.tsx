@@ -1,45 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { submitReview } from "../actions";
 
-export default function ReviewUpload({ credits }: { credits: number }) {
-  const router = useRouter();
+export default function ReviewUpload() {
   const [file, setFile] = useState<File | null>(null);
   const [focus, setFocus] = useState("shooting form");
   const [notes, setNotes] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
 
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) return;
-    if (file.size > 200 * 1024 * 1024) { setError("Keep clips under 200 MB — 30 to 60 seconds is plenty."); return; }
-    setBusy(true); setError("");
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    const path = `${user!.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
-    const { error: upErr } = await supabase.storage.from("review-videos").upload(path, file);
-    if (upErr) { setError(upErr.message); setBusy(false); return; }
-    const res = await submitReview(path, focus, notes);
-    if (res?.error) { setError(res.error); setBusy(false); return; }
-    setFile(null); setNotes("");
-    setBusy(false);
-    router.refresh();
-  }
-
-  if (credits < 1) {
-    return (
-      <div className="card border-dashed p-6 text-center">
-        <p className="font-semibold">No review credits yet</p>
-        <p className="mt-1 text-sm text-muted">
-          All In members get monthly credits, or grab a single review any time.
-        </p>
-        <a href="/pricing" className="btn-game mt-4">Get a review credit</a>
-      </div>
-    );
+    // Upload is intentionally disabled — film review is coming soon.
   }
 
   return (
@@ -47,13 +17,16 @@ export default function ReviewUpload({ credits }: { credits: number }) {
       <h2 className="display text-xl">Send in your film</h2>
       <p className="mt-1 text-sm text-muted">
         30–60 seconds, side-on or facing the hoop, full body in frame. A coach will break it down
-        within 5 business days. This uses 1 credit (you have {credits}).
+        within 5 business days.
+      </p>
+      <p className="mt-2 inline-block rounded-full border border-line px-3 py-0.5 text-xs font-semibold uppercase tracking-wider text-wood">
+        Coming soon
       </p>
       <div className="mt-4 space-y-4">
         <div>
           <label className="label" htmlFor="clip">Your clip</label>
-          <input id="clip" type="file" accept="video/*" capture="environment" className="input"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
+          <input id="clip" type="file" accept="video/*" className="input"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         </div>
         <div>
           <label className="label" htmlFor="focus">What should we look at?</label>
@@ -72,9 +45,8 @@ export default function ReviewUpload({ credits }: { credits: number }) {
             placeholder="e.g. My shot feels flat from three. I shoot fine from midrange." />
         </div>
       </div>
-      {error && <p className="mt-3 text-sm text-game">{error}</p>}
-      <button className="btn-game mt-5 w-full" disabled={busy || !file}>
-        {busy ? "Uploading…" : "Submit for review (1 credit)"}
+      <button className="btn-game mt-5 w-full" disabled>
+        {file ? "Upload coming soon" : "Pick a clip"}
       </button>
     </form>
   );
