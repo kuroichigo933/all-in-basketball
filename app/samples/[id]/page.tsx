@@ -22,6 +22,9 @@ export default function SampleProgramDetail({ params }: { params: { id: string }
         <p className="mt-4 text-sm font-semibold uppercase tracking-wider text-wood">
           5 drills · 12 minutes each · 60-minute session
         </p>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Link href={`/samples/${program.id}/play`} className="btn-game">Start practice</Link>
+        </div>
       </header>
 
       <ol className="mt-10 space-y-5">
@@ -47,7 +50,7 @@ export default function SampleProgramDetail({ params }: { params: { id: string }
       </ol>
 
       <div className="mt-10 flex flex-wrap gap-3">
-        <Link href="/signup" className="btn-game">Create a free account to track this</Link>
+        <Link href={`/samples/${program.id}/play`} className="btn-game">Start practice</Link>
         <Link href="/samples" className="btn-ghost">Try another program</Link>
       </div>
     </main>

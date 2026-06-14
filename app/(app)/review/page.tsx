@@ -21,11 +21,12 @@ export default function Review() {
 
           <div className="relative mt-4 aspect-[4/3] w-full bg-raised">
             <Image
-              src="https://images.unsplash.com/photo-1518614368389-99c1d3f9a6c6?w=1100&auto=format&fit=crop"
+              src="/bad-basketball-shot.gif"
               alt="Sample jump shot — slight balance and elbow issues"
               fill
+              unoptimized
               sizes="(max-width: 1024px) 100vw, 50vw"
-              className="object-cover"
+              className="object-contain"
             />
             <span className="absolute left-3 top-3 rounded-full bg-asphalt/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-chalk backdrop-blur">
               Sample clip

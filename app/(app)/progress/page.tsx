@@ -32,12 +32,12 @@ export default async function Progress() {
       </div>
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
+        <ShotTracker />
         <div className="card p-5">
           <h2 className="display text-xl">Shot chart</h2>
           <p className="mt-1 text-sm text-muted">All-time percentages by spot. Green is money, orange needs reps.</p>
           <div className="mt-4"><CourtChart stats={zoneStats} /></div>
         </div>
-        <ShotTracker />
       </section>
     </>
   );

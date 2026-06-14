@@ -62,6 +62,30 @@ export default async function Dashboard() {
         </Link>
       </section>
 
+      <section className="mt-8">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="display text-xl sm:text-2xl">Try a demo practice</h2>
+          <Link href="/library" className="text-xs uppercase tracking-wider text-muted hover:text-chalk">See all</Link>
+        </div>
+        <p className="mt-1 text-sm text-muted">
+          One hour, five drills. Pick a focus and we&apos;ll time you through it.
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { id: "shooting", label: "Shooting" },
+            { id: "dribbling", label: "Dribbling" },
+            { id: "conditioning", label: "Conditioning" },
+            { id: "balance", label: "Balance" },
+          ].map((p) => (
+            <Link key={p.id} href={`/samples/${p.id}`}
+              className="card group p-4 text-center hover:border-game">
+              <p className="display text-base group-hover:text-game sm:text-lg">{p.label}</p>
+              <p className="mt-1 text-[10px] uppercase tracking-wider text-muted">5 drills · 60 min</p>
+            </Link>
+          ))}
+        </div>
+      </section>
+
       {badges && badges.length > 0 && (
         <section className="mt-8">
           <h2 className="display baseline text-xl">Trophy case</h2>

@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 type SessionType = { id: string; title: string; description: string; duration_minutes: number; price_cents: number };
 
 const SAMPLE_TYPES: SessionType[] = [
-  { id: "private", title: "Private 1-on-1", description: "60 min with Coach Sanar. Built around your goals.", duration_minutes: 60, price_cents: 9000 },
+  { id: "private", title: "Private 1-on-1", description: "60 min with Coach Sanar. Built around your goals.", duration_minutes: 60, price_cents: 7000 },
   { id: "small", title: "Small group (2–3)", description: "60 min. Bring a friend, split the cost.", duration_minutes: 60, price_cents: 5000 },
   { id: "skills", title: "Skills clinic", description: "75 min group session. Shooting one week, handles the next.", duration_minutes: 75, price_cents: 3500 },
 ];

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import Image from "next/image";
-import { SAMPLE_PROGRAMS } from "@/lib/sample-programs";
 
 export default function Landing() {
   return (
@@ -34,7 +33,7 @@ export default function Landing() {
         <div className="card overflow-hidden md:grid md:grid-cols-[1fr_1.2fr]">
           <div className="relative aspect-[4/5] w-full md:aspect-auto md:h-full">
             <Image
-              src="/coach-sanar.avif"
+              src="/coach-sanar.png"
               alt="Coach Sanar"
               fill
               priority
@@ -58,36 +57,10 @@ export default function Landing() {
               finally goes in, Sanar meets you where you are and pushes you to the next floor.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link href="/book" className="btn-game !py-2 !px-4 text-sm">Book a session with Sanar</Link>
-              <Link href="/samples" className="btn-ghost !py-2 !px-4 text-sm">See sample programs</Link>
+              <Link href="/signup" className="btn-game !py-2 !px-4 text-sm">Start training with Sanar</Link>
+              <Link href="/book" className="btn-ghost !py-2 !px-4 text-sm">Book a session</Link>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* Sample programs */}
-      <section className="mx-auto max-w-5xl px-4 pb-16">
-        <p className="text-xs uppercase tracking-[0.25em] text-game">Sample Programs</p>
-        <h2 className="display mt-2 text-3xl md:text-4xl">Five drills. One hour. One focus.</h2>
-        <p className="mt-3 max-w-xl text-muted">
-          Each session is built around five 12-minute blocks. Pick the focus, prop up your phone,
-          and get to work.
-        </p>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-          {SAMPLE_PROGRAMS.map((p) => (
-            <Link key={p.id} href={`/samples/${p.id}`} className="card group overflow-hidden hover:border-game">
-              <div className="relative aspect-[4/3] w-full">
-                <Image src={p.cover} alt={p.title} fill sizes="(max-width: 768px) 50vw, 25vw"
-                  className="object-cover transition-transform group-hover:scale-[1.03]" />
-              </div>
-              <div className="p-4">
-                <h3 className="display text-xl group-hover:text-game">{p.title}</h3>
-                <p className="mt-1 text-xs uppercase tracking-wider text-muted">
-                  5 drills · 60 min
-                </p>
-              </div>
-            </Link>
-          ))}
         </div>
       </section>
 
