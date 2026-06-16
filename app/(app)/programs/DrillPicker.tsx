@@ -41,9 +41,15 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
           </div>
           <span className="text-sm text-muted">{playing + 1} / {queue.length}</span>
         </div>
-        <div className="aspect-video w-full overflow-hidden rounded-card bg-raised">
-          <iframe src={drill.embedUrl} allow="autoplay" className="h-full w-full" title={drill.name} />
-        </div>
+        <video
+          src={drill.videoUrl}
+          controls
+          autoPlay
+          playsInline
+          preload="metadata"
+          className="w-full rounded-card bg-raised"
+          style={{ maxHeight: "60vh" }}
+        />
         <div className="mt-4 flex gap-3">
           {playing > 0 && (
             <button className="btn-ghost flex-1 !py-2" onClick={() => setPlaying((p) => (p ?? 0) - 1)}>← Prev</button>

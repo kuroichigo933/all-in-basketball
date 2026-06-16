@@ -20,8 +20,8 @@
 export type DrillFile = {
   id: string;
   name: string;
-  embedUrl: string;
-  thumbnailUrl: string | null;
+  // proxy URL — streams through /api/video/[fileId] so no Drive UI
+  videoUrl: string;
   mimeType: string;
 };
 
@@ -99,7 +99,7 @@ async function getAccessToken(): Promise<string> {
 async function listChildren(folderId: string, token: string, label = folderId): Promise<any[]> {
   const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
     `'${folderId}' in parents and trashed = false`
-  )}&fields=files(id,name,mimeType,thumbnailLink)&orderBy=name&pageSize=200`;
+  )}&fields=files(id,name,mimeType)&orderBy=name&pageSize=200`;
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -166,8 +166,7 @@ export async function getDrillLibrary(): Promise<DrillCategory[]> {
       const drills: DrillFile[] = files.map((f) => ({
         id: f.id,
         name: formatDrillName(f.name),
-        embedUrl: `https://drive.google.com/file/d/${f.id}/preview`,
-        thumbnailUrl: f.thumbnailLink ?? null,
+        videoUrl: `/api/video/${f.id}`,
         mimeType: f.mimeType,
       }));
       if (drills.length > 0) tiers.push({ tier: tier.name, drills });
@@ -177,4 +176,38 @@ export async function getDrillLibrary(): Promise<DrillCategory[]> {
 
   console.log(`[Drive] final result — ${categories.length} categorie(s):`, categories.map((c) => `${c.category}(${c.tiers.map((t) => `${t.tier}:${t.drills.length}`).join(",")})`).join(" | "));
   return categories;
+}
+
+// Stream a Drive file through the server (keeps videos private, no Drive UI).
+// Forwards Range header so seeking works correctly.
+export async function getVideoStream(fileId: string, range?: string): Promise<{
+  stream: ReadableStream;
+  contentType: string;
+  contentLength?: number;
+  contentRange?: string;
+  status: number;
+}> {
+  const token = await getAccessToken();
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  if (range) headers["Range"] = range;
+
+  const res = await fetch(url, { headers });
+
+  if (!res.ok && res.status !== 206) {
+    throw new Error(`Drive fetch failed: ${res.status} ${res.statusText}`);
+  }
+
+  const contentType = res.headers.get("content-type") ?? "video/mp4";
+  const contentLength = res.headers.get("content-length");
+  const contentRange = res.headers.get("content-range");
+
+  return {
+    stream: res.body as ReadableStream,
+    contentType,
+    contentLength: contentLength ? Number(contentLength) : undefined,
+    contentRange: contentRange ?? undefined,
+    status: res.status,
+  };
 }

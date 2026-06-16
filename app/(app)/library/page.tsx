@@ -1,9 +1,10 @@
 import { PageTitle } from "@/components/ui";
 import { getDrillLibrary } from "@/lib/google-drive";
+import DrillVideoCard from "@/components/DrillVideoCard";
 
 const TIER_ORDER = ["Beginner", "Intermediate", "Expert"];
 
-function sortTiers(tiers: { tier: string }[]) {
+function sortTiers<T extends { tier: string }>(tiers: T[]): T[] {
   return [...tiers].sort((a, b) => {
     const ai = TIER_ORDER.indexOf(a.tier);
     const bi = TIER_ORDER.indexOf(b.tier);
@@ -42,24 +43,12 @@ export default async function Library() {
                   <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-wood">{tier}</p>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {drills.map((drill) => (
-                      <div key={drill.id} className="card overflow-hidden">
-                        <div className="relative aspect-video bg-raised">
-                          <iframe
-                            src={drill.embedUrl}
-                            allow="autoplay"
-                            allowFullScreen
-                            className="h-full w-full"
-                            title={drill.name}
-                            loading="lazy"
-                          />
-                        </div>
-                        <div className="p-3">
-                          <p className="font-semibold">{drill.name}</p>
-                          <p className="mt-0.5 text-xs uppercase tracking-wider text-muted">
-                            {cat.category} · {tier}
-                          </p>
-                        </div>
-                      </div>
+                      <DrillVideoCard
+                        key={drill.id}
+                        drill={drill}
+                        category={cat.category}
+                        tier={tier}
+                      />
                     ))}
                   </div>
                 </div>
