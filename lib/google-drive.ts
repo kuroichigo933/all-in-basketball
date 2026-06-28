@@ -148,24 +148,42 @@ async function getGoogleDocText(fileId: string, token: string): Promise<string> 
 
 export function parseGoogleDocChecklist(text: string): { [videoName: string]: string[] } {
   const result: { [videoName: string]: string[] } = {};
+  
+  // Split into lines
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   
   let currentVideoName: string | null = null;
   
   for (const line of lines) {
-    // Check if line starts with a number, e.g., "1. video_name" or "1) video_name" or just "1.video_name"
+    // Check if line starts with a video number, e.g., "1. video_name" or "1) video_name" or just "1.video_name"
     const videoMatch = line.match(/^\d+\s*[\.\)]\s*(.*)$/i);
     if (videoMatch) {
-      currentVideoName = videoMatch[1].trim();
+      let videoName = videoMatch[1].trim();
+      // Remove trailing comma if any
+      if (videoName.endsWith(",")) {
+        videoName = videoName.slice(0, -1).trim();
+      }
+      currentVideoName = videoName;
       result[currentVideoName] = [];
       continue;
     }
     
-    // If we have a current video, check if line starts with a letter like "a." or "b.", or a bullet like "-", etc.
+    // If we are currently under a video, any non-video line is a checklist item!
     if (currentVideoName) {
-      const itemMatch = line.match(/^[a-zA-Z\d]\s*[\.\)]\s*(.*)$/i) || line.match(/^[\-\*•]\s*(.*)$/i);
-      if (itemMatch) {
-        result[currentVideoName].push(itemMatch[1].trim());
+      let cleanItem = line;
+      // Strip any list prefix (like "a.", "b)", "-", "*", bullets, etc.)
+      const prefixMatch = cleanItem.match(/^(?:[a-zA-Z\d]+[\.\)]|[\-\*•◦▪▫–—\u2013\u2014\u25e6\u25aa\u25ab])\s*(.*)$/);
+      if (prefixMatch) {
+        cleanItem = prefixMatch[1].trim();
+      }
+      
+      // Clean up any trailing commas from comma-separated formatting if they were copied
+      if (cleanItem.endsWith(",")) {
+        cleanItem = cleanItem.slice(0, -1).trim();
+      }
+      
+      if (cleanItem) {
+        result[currentVideoName].push(cleanItem);
       }
     }
   }

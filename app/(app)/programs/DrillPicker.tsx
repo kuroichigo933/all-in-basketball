@@ -282,7 +282,7 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
                 className="w-full text-left rounded-card border border-line p-4 hover:border-game hover:bg-game/5 transition-colors group"
               >
                 <p className="font-bold text-chalk group-hover:text-game">Break to Practice Between Videos</p>
-                <p className="text-xs text-muted mt-1">Pause after each video to complete a checklist generated from Google Docs before automatically moving to the next drill.</p>
+                <p className="text-xs text-muted mt-1">Pause after each video to practice the moves shown in the video! Use our recommended list or until you feel comforable.</p>
               </button>
             </div>
             
