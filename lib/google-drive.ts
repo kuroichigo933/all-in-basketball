@@ -104,7 +104,7 @@ async function listChildren(folderId: string, token: string, label = folderId): 
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
-    next: { revalidate: 300 },
+    cache: "no-store",
   });
   const json = await res.json();
 
@@ -149,7 +149,7 @@ async function exportDriveFileAsText(fileId: string, mimeType: string, token: st
   const url = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${exportMime}`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
-    next: { revalidate: 300 },
+    cache: "no-store",
   });
   if (!res.ok) {
     console.error(`[Drive] exportDriveFileAsText(${fileId}, ${mimeType}) — HTTP ${res.status}`);
@@ -323,19 +323,30 @@ export async function getDrillLibrary(): Promise<DrillCategory[]> {
       const videoFiles = files.filter((f) => f.mimeType && f.mimeType.startsWith("video/"));
       
       const checklistMap: { [key: string]: string[] } = {};
-      for (const doc of docFiles) {
-        try {
-          const docText = await exportDriveFileAsText(doc.id, doc.mimeType, token);
-          const parsed = parseGoogleDocChecklist(docText);
-          Object.assign(checklistMap, parsed);
-        } catch (err) {
-          console.error(`[Drive] Failed to fetch/parse doc/sheet checklist for ${doc.name} (${doc.id}):`, err);
+      if (docFiles.length === 0) {
+        console.log(`[Drive] ⚠️ No checklist document/spreadsheet found in "${cat.name}/${tier.name}"`);
+      } else {
+        for (const doc of docFiles) {
+          try {
+            console.log(`[Drive] 🔍 Found checklist file: "${doc.name}" in "${cat.name}/${tier.name}"`);
+            const docText = await exportDriveFileAsText(doc.id, doc.mimeType, token);
+            const parsed = parseGoogleDocChecklist(docText);
+            console.log(`[Drive] 📄 Parsed ${Object.keys(parsed).length} keys from checklist file "${doc.name}"`);
+            Object.assign(checklistMap, parsed);
+          } catch (err) {
+            console.error(`[Drive] ❌ Failed to fetch/parse doc/sheet checklist for ${doc.name} (${doc.id}):`, err);
+          }
         }
       }
 
       const drills: DrillFile[] = videoFiles.map((f) => {
         const drillName = formatDrillName(f.name);
         const checklist = findChecklistForDrill(drillName, f.name, checklistMap);
+        if (checklist && checklist.length > 0) {
+          console.log(`[Drive] ✅ Matched checklist for drill "${drillName}" (${checklist.length} items)`);
+        } else {
+          console.log(`[Drive] ⚠️ No checklist match found for drill "${drillName}" (using fallback)`);
+        }
         return {
           id: f.id,
           name: drillName,
