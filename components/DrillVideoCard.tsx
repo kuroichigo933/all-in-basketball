@@ -51,6 +51,7 @@ export default function DrillVideoCard({ drill, category, tier }: {
             playsInline
             className="h-full w-full object-cover"
             tabIndex={-1}
+            onContextMenu={(e) => e.preventDefault()}
           />
           {/* Play button overlay */}
           <div className="absolute inset-0 flex items-center justify-center bg-asphalt/20 transition-colors group-hover:bg-asphalt/10">
@@ -96,6 +97,8 @@ export default function DrillVideoCard({ drill, category, tier }: {
               preload="metadata"
               className="w-full rounded-card bg-raised"
               style={{ maxHeight: "70vh" }}
+              controlsList="nodownload"
+              onContextMenu={(e) => e.preventDefault()}
             />
           </div>
         </div>

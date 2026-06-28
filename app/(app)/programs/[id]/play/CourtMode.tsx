@@ -143,6 +143,7 @@ export default function CourtMode({ blocks, programId, dayId, dayTitle }: {
       {phase === "work" ? (
         <>
           <video key={block.id} src={block.videoUrl} autoPlay loop muted playsInline
+            onContextMenu={(e) => e.preventDefault()}
             className="mt-4 aspect-video w-full rounded-card bg-raised object-cover" />
           <h1 className="display mt-4 text-2xl">{block.title}</h1>
           {block.repsLabel && <p className="text-sm font-semibold text-wood">{block.repsLabel}</p>}

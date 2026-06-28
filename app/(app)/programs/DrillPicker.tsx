@@ -12,6 +12,18 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
   const [playing, setPlaying] = useState<number | null>(null);
   const [openCat, setOpenCat] = useState<string | null>(categories[0]?.category ?? null);
 
+  // Play session options
+  const [playMode, setPlayMode] = useState<"continuous" | "break" | null>(null);
+  const [showModeSelect, setShowModeSelect] = useState(false);
+  const [showChecklist, setShowChecklist] = useState(false);
+  const [checkedItems, setCheckedItems] = useState<{ [index: number]: boolean }>({});
+
+  const handleSetPlaying = (idx: number | null) => {
+    setPlaying(idx);
+    setShowChecklist(false);
+    setCheckedItems({});
+  };
+
   function toggle(drill: DrillFile, category: string, tier: string) {
     setQueue((q) => {
       const idx = q.findIndex((x) => x.id === drill.id);
@@ -32,6 +44,42 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
 
   if (playing !== null) {
     const drill = queue[playing];
+    const checklistItems = (drill.checklist && drill.checklist.length > 0)
+      ? drill.checklist
+      : ["Practice " + drill.name];
+
+    const handleVideoEnded = () => {
+      if (playMode === "continuous") {
+        if (playing < queue.length - 1) {
+          handleSetPlaying(playing + 1);
+        } else {
+          handleSetPlaying(null);
+        }
+      } else if (playMode === "break") {
+        setShowChecklist(true);
+        setCheckedItems({});
+      }
+    };
+
+    const handleCheck = (index: number) => {
+      setCheckedItems((prev) => {
+        const next = { ...prev, [index]: !prev[index] };
+        const allChecked = checklistItems.every((_, idx) => next[idx] === true);
+        if (allChecked) {
+          setTimeout(() => {
+            if (playing !== null) {
+              if (playing < queue.length - 1) {
+                handleSetPlaying(playing + 1);
+              } else {
+                handleSetPlaying(null);
+              }
+            }
+          }, 800);
+        }
+        return next;
+      });
+    };
+
     return (
       <div className="rounded-card border border-line bg-surface p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -41,28 +89,64 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
           </div>
           <span className="text-sm text-muted">{playing + 1} / {queue.length}</span>
         </div>
-        <video
-          src={drill.videoUrl}
-          controls
-          autoPlay
-          playsInline
-          preload="metadata"
-          className="w-full rounded-card bg-raised"
-          style={{ maxHeight: "60vh" }}
-        />
+
+        {showChecklist ? (
+          <div className="my-4 rounded-card border border-game/30 bg-game/5 p-6 animate-in fade-in duration-200">
+            <p className="display text-xl text-game mb-1">Practice Checklist</p>
+            <p className="text-sm text-muted mb-4">Complete all steps to automatically advance to the next drill.</p>
+            <div className="space-y-3">
+              {checklistItems.map((item, idx) => {
+                const isChecked = !!checkedItems[idx];
+                return (
+                  <label
+                    key={idx}
+                    className={`flex items-center gap-3 rounded-card border p-4 cursor-pointer select-none transition-colors
+                      ${isChecked 
+                        ? "border-make bg-make/10 text-make" 
+                        : "border-line bg-raised/50 hover:border-game/50"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => handleCheck(idx)}
+                      className="h-5 w-5 rounded border-line text-game focus:ring-game"
+                    />
+                    <span className={`text-base font-medium ${isChecked ? "line-through text-muted" : "text-chalk"}`}>
+                      {item}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <video
+            src={drill.videoUrl}
+            controls
+            autoPlay
+            playsInline
+            preload="metadata"
+            className="w-full rounded-card bg-raised"
+            style={{ maxHeight: "60vh" }}
+            controlsList="nodownload"
+            onContextMenu={(e) => e.preventDefault()}
+            onEnded={handleVideoEnded}
+          />
+        )}
+
         <div className="mt-4 flex gap-3">
           {playing > 0 && (
-            <button className="btn-ghost flex-1 !py-2" onClick={() => setPlaying((p) => (p ?? 0) - 1)}>← Prev</button>
+            <button className="btn-ghost flex-1 !py-2" onClick={() => handleSetPlaying(playing - 1)}>← Prev</button>
           )}
           {playing < queue.length - 1 ? (
-            <button className="btn-game flex-1 !py-2" onClick={() => setPlaying((p) => (p ?? 0) + 1)}>Next →</button>
+            <button className="btn-game flex-1 !py-2" onClick={() => handleSetPlaying(playing + 1)}>Next →</button>
           ) : (
-            <button className="btn-game flex-1 !py-2" onClick={() => setPlaying(null)}>Done ✓</button>
+            <button className="btn-game flex-1 !py-2" onClick={() => handleSetPlaying(null)}>Done ✓</button>
           )}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {queue.map((d, i) => (
-            <button key={d.id} onClick={() => setPlaying(i)}
+            <button key={d.id} onClick={() => handleSetPlaying(i)}
               className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors
                 ${i === playing ? "border-game text-game" : "border-line text-muted hover:border-game"}`}>
               {i + 1}. {d.name}
@@ -156,7 +240,7 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
           type="button"
           className="btn-game mt-4 w-full"
           disabled={queue.length === 0}
-          onClick={() => setPlaying(0)}
+          onClick={() => setShowModeSelect(true)}
         >
           Start session ({queue.length} drill{queue.length !== 1 ? "s" : ""})
         </button>
@@ -167,6 +251,51 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
           </button>
         )}
       </div>
+
+      {showModeSelect && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-card border border-line bg-surface p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="display text-2xl mb-2 text-chalk">Choose Session Mode</h3>
+            <p className="text-sm text-muted mb-6">How would you like to practice your chosen drills?</p>
+            
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setPlayMode("continuous");
+                  setShowModeSelect(false);
+                  handleSetPlaying(0);
+                }}
+                className="w-full text-left rounded-card border border-line p-4 hover:border-game hover:bg-game/5 transition-colors group"
+              >
+                <p className="font-bold text-chalk group-hover:text-game">Continuous Play</p>
+                <p className="text-xs text-muted mt-1">Videos play one after another automatically as soon as they finish.</p>
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => {
+                  setPlayMode("break");
+                  setShowModeSelect(false);
+                  handleSetPlaying(0);
+                }}
+                className="w-full text-left rounded-card border border-line p-4 hover:border-game hover:bg-game/5 transition-colors group"
+              >
+                <p className="font-bold text-chalk group-hover:text-game">Break to Practice Between Videos</p>
+                <p className="text-xs text-muted mt-1">Pause after each video to complete a checklist generated from Google Docs before automatically moving to the next drill.</p>
+              </button>
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => setShowModeSelect(false)}
+              className="btn-ghost mt-6 w-full !py-2"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

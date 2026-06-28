@@ -23,6 +23,7 @@ export type DrillFile = {
   // proxy URL — streams through /api/video/[fileId] so no Drive UI
   videoUrl: string;
   mimeType: string;
+  checklist?: string[];
 };
 
 export type DrillTier = {
@@ -132,6 +133,72 @@ function formatDrillName(filename: string): string {
   return name || base; // fallback to full base if everything was filtered
 }
 
+async function getGoogleDocText(fileId: string, token: string): Promise<string> {
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    next: { revalidate: 300 },
+  });
+  if (!res.ok) {
+    console.error(`[Drive] getGoogleDocText(${fileId}) — HTTP ${res.status}`);
+    return "";
+  }
+  return await res.text();
+}
+
+export function parseGoogleDocChecklist(text: string): { [videoName: string]: string[] } {
+  const result: { [videoName: string]: string[] } = {};
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  
+  let currentVideoName: string | null = null;
+  
+  for (const line of lines) {
+    // Check if line starts with a number, e.g., "1. video_name" or "1) video_name" or just "1.video_name"
+    const videoMatch = line.match(/^\d+\s*[\.\)]\s*(.*)$/i);
+    if (videoMatch) {
+      currentVideoName = videoMatch[1].trim();
+      result[currentVideoName] = [];
+      continue;
+    }
+    
+    // If we have a current video, check if line starts with a letter like "a." or "b.", or a bullet like "-", etc.
+    if (currentVideoName) {
+      const itemMatch = line.match(/^[a-zA-Z\d]\s*[\.\)]\s*(.*)$/i) || line.match(/^[\-\*•]\s*(.*)$/i);
+      if (itemMatch) {
+        result[currentVideoName].push(itemMatch[1].trim());
+      }
+    }
+  }
+  return result;
+}
+
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\.[^/.]+$/, "") // remove extension
+    .replace(/[^a-z0-9]/g, ""); // remove non-alphanumeric
+}
+
+function findChecklistForDrill(drillName: string, originalFileName: string, checklistMap: { [key: string]: string[] }): string[] {
+  const normDrill = normalizeName(drillName);
+  const normFile = normalizeName(originalFileName);
+  
+  for (const key of Object.keys(checklistMap)) {
+    const normKey = normalizeName(key);
+    if (
+      normKey === normDrill ||
+      normKey === normFile ||
+      normFile.includes(normKey) ||
+      normKey.includes(normFile) ||
+      normDrill.includes(normKey) ||
+      normKey.includes(normDrill)
+    ) {
+      return checklistMap[key];
+    }
+  }
+  return [];
+}
+
 export async function getDrillLibrary(): Promise<DrillCategory[]> {
   const rootId = process.env.GOOGLE_DRIVE_FOLDER_ID;
   console.log("[Drive] getDrillLibrary — rootId:", rootId ?? "MISSING");
@@ -163,12 +230,33 @@ export async function getDrillLibrary(): Promise<DrillCategory[]> {
     for (const tier of tierFolders) {
       const files = (await listChildren(tier.id, token, `${cat.name}/${tier.name}`)).filter((f) => f.mimeType !== FOLDER);
       console.log(`[Drive] "${cat.name}/${tier.name}" — ${files.length} file(s)`);
-      const drills: DrillFile[] = files.map((f) => ({
-        id: f.id,
-        name: formatDrillName(f.name),
-        videoUrl: `/api/video/${f.id}`,
-        mimeType: f.mimeType,
-      }));
+      
+      const docFiles = files.filter((f) => f.mimeType === "application/vnd.google-apps.document");
+      const videoFiles = files.filter((f) => f.mimeType && f.mimeType.startsWith("video/"));
+      
+      const checklistMap: { [key: string]: string[] } = {};
+      for (const doc of docFiles) {
+        try {
+          const docText = await getGoogleDocText(doc.id, token);
+          const parsed = parseGoogleDocChecklist(docText);
+          Object.assign(checklistMap, parsed);
+        } catch (err) {
+          console.error(`[Drive] Failed to fetch/parse doc checklist for ${doc.name} (${doc.id}):`, err);
+        }
+      }
+
+      const drills: DrillFile[] = videoFiles.map((f) => {
+        const drillName = formatDrillName(f.name);
+        const checklist = findChecklistForDrill(drillName, f.name, checklistMap);
+        return {
+          id: f.id,
+          name: drillName,
+          videoUrl: `/api/video/${f.id}`,
+          mimeType: f.mimeType,
+          ...(checklist && checklist.length > 0 ? { checklist } : {}),
+        };
+      });
+
       if (drills.length > 0) tiers.push({ tier: tier.name, drills });
     }
     if (tiers.length > 0) categories.push({ category: cat.name, tiers });

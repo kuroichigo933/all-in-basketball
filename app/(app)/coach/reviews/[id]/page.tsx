@@ -31,7 +31,7 @@ export default async function ReviewDetail({ params }: { params: { id: string } 
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
           {signed?.signedUrl ? (
-            <video src={signed.signedUrl} controls playsInline className="w-full rounded-card bg-raised" />
+            <video src={signed.signedUrl} controls playsInline controlsList="nodownload" className="w-full rounded-card bg-raised" />
           ) : (
             <p className="text-sm text-game">Couldn&apos;t load the clip.</p>
           )}
