@@ -130,20 +130,47 @@ function formatDrillName(filename: string): string {
     .map((p) => p.replace(/\b([a-z])/g, (c) => c.toUpperCase()))
     .join(" ")
     .trim();
-  return name || base; // fallback to full base if everything was filtered
+
+  const rawName = name || base;
+
+  // Deduplicate adjacent identical words (e.g. "Beginner Beginner 2" -> "Beginner 2")
+  const words = rawName.split(/\s+/);
+  const deduped: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    if (i === 0 || words[i].toLowerCase() !== words[i - 1].toLowerCase()) {
+      deduped.push(words[i]);
+    }
+  }
+  return deduped.join(" ");
 }
 
-async function getGoogleDocText(fileId: string, token: string): Promise<string> {
-  const url = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`;
+async function exportDriveFileAsText(fileId: string, mimeType: string, token: string): Promise<string> {
+  const exportMime = mimeType === "application/vnd.google-apps.spreadsheet" ? "text/csv" : "text/plain";
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${exportMime}`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
     next: { revalidate: 300 },
   });
   if (!res.ok) {
-    console.error(`[Drive] getGoogleDocText(${fileId}) — HTTP ${res.status}`);
+    console.error(`[Drive] exportDriveFileAsText(${fileId}, ${mimeType}) — HTTP ${res.status}`);
     return "";
   }
-  return await res.text();
+  let text = await res.text();
+  
+  if (mimeType === "application/vnd.google-apps.spreadsheet") {
+    // If it's a CSV, clean up quotes/cell formatting from rows to make it plain-text-like
+    text = text
+      .split(/\r?\n/)
+      .map(line => {
+        return line
+          .replace(/^"|"$/g, "") // strip leading/trailing quotes of row
+          .replace(/","/g, ", ") // replace cell separators with spaces/commas
+          .replace(/""/g, '"') // unescape double quotes
+          .trim();
+      })
+      .join("\n");
+  }
+  return text;
 }
 
 export function parseGoogleDocChecklist(text: string): { [videoName: string]: string[] } {
@@ -197,10 +224,36 @@ function normalizeName(name: string): string {
     .replace(/[^a-z0-9]/g, ""); // remove non-alphanumeric
 }
 
+function getWordSet(name: string): Set<string> {
+  const clean = name.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
+  const words = clean.split(/\s+/).filter(Boolean);
+  return new Set(words);
+}
+
+function wordSetsMatch(setA: Set<string>, setB: Set<string>): boolean {
+  if (setA.size === 0 || setB.size === 0) return false;
+  
+  let intersectCount = 0;
+  setA.forEach((word) => {
+    if (setB.has(word)) intersectCount++;
+  });
+  
+  // If one set is a subset of another, it's a match
+  const minSize = Math.min(setA.size, setB.size);
+  if (intersectCount >= minSize) return true;
+  
+  // Or if they share at least 75% of words
+  const maxSize = Math.max(setA.size, setB.size);
+  if (intersectCount / maxSize >= 0.75) return true;
+  
+  return false;
+}
+
 function findChecklistForDrill(drillName: string, originalFileName: string, checklistMap: { [key: string]: string[] }): string[] {
   const normDrill = normalizeName(drillName);
   const normFile = normalizeName(originalFileName);
   
+  // 1. Direct normalized matching
   for (const key of Object.keys(checklistMap)) {
     const normKey = normalizeName(key);
     if (
@@ -214,6 +267,18 @@ function findChecklistForDrill(drillName: string, originalFileName: string, chec
       return checklistMap[key];
     }
   }
+  
+  // 2. Fuzzy word-set matching
+  const setDrill = getWordSet(drillName);
+  const setFile = getWordSet(originalFileName);
+  
+  for (const key of Object.keys(checklistMap)) {
+    const setKey = getWordSet(key);
+    if (wordSetsMatch(setKey, setDrill) || wordSetsMatch(setKey, setFile)) {
+      return checklistMap[key];
+    }
+  }
+  
   return [];
 }
 
@@ -249,17 +314,22 @@ export async function getDrillLibrary(): Promise<DrillCategory[]> {
       const files = (await listChildren(tier.id, token, `${cat.name}/${tier.name}`)).filter((f) => f.mimeType !== FOLDER);
       console.log(`[Drive] "${cat.name}/${tier.name}" — ${files.length} file(s)`);
       
-      const docFiles = files.filter((f) => f.mimeType === "application/vnd.google-apps.document");
+      // Support BOTH Google Docs (document) and Google Sheets (spreadsheet)
+      const docFiles = files.filter(
+        (f) =>
+          f.mimeType === "application/vnd.google-apps.document" ||
+          f.mimeType === "application/vnd.google-apps.spreadsheet"
+      );
       const videoFiles = files.filter((f) => f.mimeType && f.mimeType.startsWith("video/"));
       
       const checklistMap: { [key: string]: string[] } = {};
       for (const doc of docFiles) {
         try {
-          const docText = await getGoogleDocText(doc.id, token);
+          const docText = await exportDriveFileAsText(doc.id, doc.mimeType, token);
           const parsed = parseGoogleDocChecklist(docText);
           Object.assign(checklistMap, parsed);
         } catch (err) {
-          console.error(`[Drive] Failed to fetch/parse doc checklist for ${doc.name} (${doc.id}):`, err);
+          console.error(`[Drive] Failed to fetch/parse doc/sheet checklist for ${doc.name} (${doc.id}):`, err);
         }
       }
 
