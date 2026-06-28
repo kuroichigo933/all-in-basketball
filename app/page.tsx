@@ -13,18 +13,33 @@ export default function Landing() {
         </nav>
       </header>
 
-      <section className="mx-auto max-w-5xl px-4 pb-12 pt-10 sm:pb-16 sm:pt-16 md:pt-24">
-        <p className="text-xs uppercase tracking-[0.25em] text-game sm:text-sm">All In Basketball Training</p>
-        <h1 className="display mt-3 max-w-3xl text-4xl leading-[1.05] sm:text-5xl md:text-7xl">
-          If it was easy, everyone would do it.
-        </h1>
-        <p className="mt-6 max-w-xl text-lg text-muted">
-          Train the way our in-gym athletes train. Follow-along court workouts, a full drill
-          library, shot tracking — and send us film of your shot for a real coach breakdown.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Link href="/signup" className="btn-game">Create a free account</Link>
-          <Link href="/pricing" className="btn-ghost">See plans</Link>
+      <section className="mx-auto max-w-6xl px-4 pb-12 pt-10 sm:pb-16 sm:pt-16 md:pt-24 lg:grid lg:grid-cols-2 lg:items-center lg:gap-12 xl:gap-16">
+        <div>
+          <p className="text-xs uppercase tracking-[0.25em] text-game sm:text-sm">All In Basketball Training</p>
+          <h1 className="display mt-3 text-4xl leading-[1.05] sm:text-5xl md:text-7xl">
+            If it was easy, everyone would do it.
+          </h1>
+          <p className="mt-6 text-lg text-muted">
+            Train the way our in-gym athletes train. Follow-along court workouts, a full drill
+            library, shot tracking — and send us film of your shot for a real coach breakdown.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link href="/signup" className="btn-game">Create a free account</Link>
+            <Link href="/pricing" className="btn-ghost">See plans</Link>
+          </div>
+        </div>
+        
+        <div className="mt-10 lg:mt-0 relative aspect-[4/3] w-full overflow-hidden rounded-card border border-line shadow-2xl bg-raised">
+          <video
+            src="/api/video/1BlXqo_s5yClB_BSiV4NSpdCW9diJ5qfy"
+            autoPlay
+            loop
+            muted
+            playsInline
+            controlsList="nodownload"
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background/20 to-transparent" />
         </div>
       </section>
 
@@ -45,12 +60,13 @@ export default function Landing() {
             <p className="text-xs uppercase tracking-[0.25em] text-game">Lead Coach</p>
             <h2 className="display mt-2 text-4xl md:text-5xl">Sanar</h2>
             <p className="mt-2 text-sm font-semibold uppercase tracking-wider text-wood">
-              Iraqi National Team · 15+ years coaching
+            NBA G League Capital City Go-Go · Iraqi National Team   15+ years coaching
             </p>
             <p className="mt-5 text-muted">
-              Sanar played for the Iraqi National Team and has spent more than a decade developing
-              hoopers at every level — from first-time middle schoolers learning a proper stance,
-              to college and pro players sharpening their game in the off-season.
+              Sanar played for the NBA G League Capital City Go-Go practice squad and the Iraqi 
+              National Team. He has spent more than a decade developing hoopers at every level — from 
+              first-time middle schoolers learning a proper stance, to college and pro players 
+              sharpening their game in the off-season.
             </p>
             <p className="mt-4 text-muted">
               Whether you&apos;re trying to crack your varsity rotation or just want a shot that

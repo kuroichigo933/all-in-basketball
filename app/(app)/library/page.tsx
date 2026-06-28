@@ -2,6 +2,8 @@ import { PageTitle } from "@/components/ui";
 import { getDrillLibrary } from "@/lib/google-drive";
 import DrillVideoCard from "@/components/DrillVideoCard";
 
+export const dynamic = "force-dynamic";
+
 const TIER_ORDER = ["Beginner", "Intermediate", "Expert"];
 
 function sortTiers<T extends { tier: string }>(tiers: T[]): T[] {

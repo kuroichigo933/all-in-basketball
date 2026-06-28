@@ -4,6 +4,8 @@ import { PageTitle } from "@/components/ui";
 import { getDrillLibrary } from "@/lib/google-drive";
 import DrillPicker from "./DrillPicker";
 
+export const dynamic = "force-dynamic";
+
 export default async function Programs() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
