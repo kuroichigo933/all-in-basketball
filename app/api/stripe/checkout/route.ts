@@ -8,18 +8,32 @@ const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 export async function POST(request: Request) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.redirect(`${SITE}/login?next=/pricing`, 303);
+  
+  const isJson = request.headers.get("content-type")?.includes("application/json");
+  if (!user) {
+    if (isJson) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.redirect(`${SITE}/login?next=/pricing`, 303);
+  }
 
-  const form = await request.formData();
-  const plan = String(form.get("plan") ?? "");
+  let plan = "";
+  if (isJson) {
+    const body = await request.json();
+    plan = String(body.plan ?? "");
+  } else {
+    const form = await request.formData();
+    plan = String(form.get("plan") ?? "");
+  }
 
   const priceMap: Record<string, string | undefined> = {
-    member: process.env.STRIPE_PRICE_MEMBER,
-    allin: process.env.STRIPE_PRICE_ALLIN,
-    review_credit: process.env.STRIPE_PRICE_REVIEW_CREDIT,
+    basic: process.env.STRIPE_PRICE_BASIC,
+    professional: process.env.STRIPE_PRICE_PROFESSIONAL,
   };
+  
   const price = priceMap[plan];
-  if (!price) return NextResponse.redirect(`${SITE}/pricing`, 303);
+  if (!price) {
+    if (isJson) return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
+    return NextResponse.redirect(`${SITE}/pricing`, 303);
+  }
 
   // reuse the Stripe customer if we have one
   const admin = createAdminClient();
@@ -40,7 +54,7 @@ export async function POST(request: Request) {
 
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
-    mode: plan === "review_credit" ? "payment" : "subscription",
+    mode: "subscription",
     line_items: [{ price, quantity: 1 }],
     client_reference_id: user.id,
     metadata: { supabase_user_id: user.id, plan },
@@ -48,5 +62,8 @@ export async function POST(request: Request) {
     cancel_url: `${SITE}/pricing`,
   });
 
+  if (isJson) {
+    return NextResponse.json({ url: session.url });
+  }
   return NextResponse.redirect(session.url!, 303);
 }

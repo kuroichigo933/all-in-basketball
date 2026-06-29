@@ -4,12 +4,14 @@ import { stripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Tier } from "@/lib/tiers";
 
-// All In includes 2 coach film reviews per month, granted on each paid invoice.
-const ALLIN_MONTHLY_CREDITS = 2;
+// Professional includes 4 coach film reviews per month, granted on each paid invoice.
+const PROFESSIONAL_MONTHLY_CREDITS = 4;
+// Basic includes 1 coach film review per month.
+const BASIC_MONTHLY_CREDITS = 1;
 
 function planFromPrice(priceId: string | undefined): Tier {
-  if (priceId === process.env.STRIPE_PRICE_ALLIN) return "allin";
-  if (priceId === process.env.STRIPE_PRICE_MEMBER) return "member";
+  if (priceId === process.env.STRIPE_PRICE_PROFESSIONAL) return "professional";
+  if (priceId === process.env.STRIPE_PRICE_BASIC) return "basic";
   return "free";
 }
 
@@ -31,6 +33,17 @@ async function addCredits(userId: string, amount: number) {
     .select("balance").eq("user_id", userId).maybeSingle();
   if (row) {
     await admin.from("review_credits").update({ balance: row.balance + amount }).eq("user_id", userId);
+  } else {
+    await admin.from("review_credits").insert({ user_id: userId, balance: amount });
+  }
+}
+
+async function setCredits(userId: string, amount: number) {
+  const admin = createAdminClient();
+  const { data: row } = await admin.from("review_credits")
+    .select("balance").eq("user_id", userId).maybeSingle();
+  if (row) {
+    await admin.from("review_credits").update({ balance: amount }).eq("user_id", userId);
   } else {
     await admin.from("review_credits").insert({ user_id: userId, balance: amount });
   }
@@ -86,12 +99,17 @@ export async function POST(request: Request) {
       break;
     }
     case "invoice.paid": {
-      // grant monthly All In credits on every paid billing cycle
+      // grant monthly credits on every paid billing cycle (no rollover)
       const invoice = event.data.object as Stripe.Invoice;
       const priceId = invoice.lines.data[0]?.price?.id;
-      if (priceId === process.env.STRIPE_PRICE_ALLIN && invoice.customer) {
-        const userId = await userIdFromCustomer(invoice.customer as string);
-        if (userId) await addCredits(userId, ALLIN_MONTHLY_CREDITS);
+      const userId = invoice.customer ? await userIdFromCustomer(invoice.customer as string) : null;
+      
+      if (userId) {
+        if (priceId === process.env.STRIPE_PRICE_PROFESSIONAL) {
+          await setCredits(userId, PROFESSIONAL_MONTHLY_CREDITS);
+        } else if (priceId === process.env.STRIPE_PRICE_BASIC) {
+          await setCredits(userId, BASIC_MONTHLY_CREDITS);
+        }
       }
       break;
     }

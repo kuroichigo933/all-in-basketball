@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageTitle } from "@/components/ui";
 import { postFeedback, claimSubmission } from "../../../actions";
@@ -27,6 +28,9 @@ export default async function ReviewDetail({ params }: { params: { id: string } 
 
   return (
     <>
+      <div className="mb-6">
+        <Link href="/coach" className="text-sm text-muted hover:text-chalk">← Back to dashboard</Link>
+      </div>
       <PageTitle kicker="Film review" title={`${p?.full_name} · ${sub.focus}`} />
       <div className="grid gap-6 lg:grid-cols-2">
         <div>

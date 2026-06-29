@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { logWorkout } from "../../../actions";
 
 export type Block = {
@@ -97,7 +98,8 @@ export default function CourtMode({ blocks, programId, dayId, dayTitle }: {
 
   if (!started) {
     return (
-      <div className="mx-auto max-w-md py-10 text-center">
+      <div className="mx-auto max-w-md py-10 text-center relative">
+        <Link href={`/programs/${programId}`} className="absolute -top-6 left-0 text-sm text-muted hover:text-chalk">← Back to program</Link>
         <p className="text-xs uppercase tracking-[0.2em] text-game">Court Mode</p>
         <h1 className="display mt-2 text-3xl">{dayTitle}</h1>
         <p className="mt-3 text-muted">

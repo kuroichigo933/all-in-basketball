@@ -24,6 +24,9 @@ export default async function ProgramDetail({ params }: { params: { id: string }
 
   return (
     <>
+      <div className="mb-6">
+        <Link href="/programs" className="text-sm text-muted hover:text-chalk">← Back to programs</Link>
+      </div>
       <PageTitle kicker={`${program.weeks}-week program`} title={program.title} />
       <p className="max-w-2xl text-muted">{program.description}</p>
       <div className="mt-3"><TierPill tier={program.tier_required as Tier} /></div>

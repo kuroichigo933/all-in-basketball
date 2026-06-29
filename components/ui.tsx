@@ -4,10 +4,10 @@ import type { Tier } from "@/lib/tiers";
 export function TierPill({ tier }: { tier: Tier }) {
   const styles: Record<Tier, string> = {
     free: "border-line text-muted",
-    member: "border-wood text-wood",
-    allin: "border-game text-game",
+    basic: "border-wood text-wood",
+    professional: "border-game text-game",
   };
-  const label: Record<Tier, string> = { free: "Free", member: "Member", allin: "All In" };
+  const label: Record<Tier, string> = { free: "Free", basic: "Basic", professional: "Professional" };
   return (
     <span className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider ${styles[tier]}`}>
       {label[tier]}

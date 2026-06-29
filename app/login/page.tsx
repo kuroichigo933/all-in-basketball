@@ -33,14 +33,15 @@ function LoginForm() {
       </div>
       {error && <p className="mt-3 text-sm text-game">{error}</p>}
       <button className="btn-game mt-6 w-full" disabled={busy}>{busy ? "Logging in…" : "Log in"}</button>
-      <p className="mt-4 text-sm text-muted">New here? <Link className="text-game" href="/signup">Start free</Link></p>
+      <p className="mt-4 text-sm text-muted">New here? <Link className="text-game" href="/signup">Sign up</Link></p>
     </form>
   );
 }
 
 export default function Login() {
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
+    <main className="relative flex min-h-screen items-center justify-center px-4">
+      <Link href="/" className="absolute left-4 top-6 text-sm text-muted hover:text-chalk sm:left-8">← Back to home</Link>
       <Suspense><LoginForm /></Suspense>
     </main>
   );

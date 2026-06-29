@@ -9,7 +9,7 @@ export default function Landing() {
         <nav className="flex items-center gap-3 sm:gap-4">
           <Link href="/pricing" className="hidden text-sm font-semibold text-muted hover:text-chalk sm:inline">Pricing</Link>
           <Link href="/login" className="text-sm font-semibold text-muted hover:text-chalk">Log in</Link>
-          <Link href="/signup" className="btn-game !py-2 !px-4 text-sm">Start free</Link>
+          <Link href="/signup" className="btn-game !py-2 !px-4 text-sm">Sign up</Link>
         </nav>
       </header>
 
@@ -24,7 +24,7 @@ export default function Landing() {
             library, shot tracking — and send us film of your shot for a real coach breakdown.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/signup" className="btn-game">Create a free account</Link>
+            <Link href="/signup" className="btn-game">Create an account</Link>
             <Link href="/pricing" className="btn-ghost">See plans</Link>
           </div>
         </div>

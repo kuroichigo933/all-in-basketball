@@ -3,16 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 
 const PLANS = [
   {
-    name: "Free", price: "$0", period: "", cta: "Start free", plan: null,
-    points: ["Starter drills", "Shot tracking + streaks", "Book in-person sessions"],
+    name: "Basic", price: "$9.99", period: "/mo", cta: "Go Basic", plan: "basic",
+    points: ["Full drill library", "All follow-along programs", "1 coach film review / month"],
   },
   {
-    name: "Member", price: "$14.99", period: "/mo", cta: "Go Member", plan: "member",
-    points: ["Full drill library", "All follow-along programs", "Court Mode with voice cues", "Progress + badges"],
-  },
-  {
-    name: "All In", price: "$39.99", period: "/mo", cta: "Go All In", plan: "allin", featured: true,
-    points: ["Everything in Member", "2 coach film reviews / month", "Priority session booking", "Parent dashboard"],
+    name: "Professional", price: "$24.99", period: "/mo", cta: "Go Professional", plan: "professional", featured: true,
+    points: ["Everything in Basic", "4 coach film reviews / month", "Priority session booking", "Early access to new content"],
   },
 ];
 
@@ -21,10 +17,11 @@ export default async function Pricing() {
   const { data: { user } } = await supabase.auth.getUser();
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-16">
-      <p className="text-xs uppercase tracking-[0.25em] text-game">Pricing</p>
+    <main className="mx-auto max-w-5xl px-4 py-16 relative">
+      <Link href={user ? "/dashboard" : "/"} className="absolute left-4 top-6 text-sm text-muted hover:text-chalk sm:left-4">← Back to {user ? "dashboard" : "home"}</Link>
+      <p className="text-xs uppercase tracking-[0.25em] text-game mt-4">Pricing</p>
       <h1 className="display mt-2 text-4xl md:text-5xl">Pick how far you want to take it</h1>
-      <div className="mt-10 grid gap-4 md:grid-cols-3">
+      <div className="mt-10 grid gap-4 md:grid-cols-2">
         {PLANS.map((p) => (
           <div key={p.name} className={`card flex flex-col p-6 ${p.featured ? "border-game" : ""}`}>
             {p.featured && <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-game">Most serious</p>}
@@ -49,22 +46,8 @@ export default async function Pricing() {
         ))}
       </div>
 
-      <div className="card mt-8 flex flex-wrap items-center justify-between gap-4 p-6">
-        <div>
-          <h2 className="display text-xl">Single film review</h2>
-          <p className="mt-1 text-sm text-muted">One coach breakdown of your shot. No subscription needed. <span className="score text-game text-lg">$29</span></p>
-        </div>
-        {user ? (
-          <form action="/api/stripe/checkout" method="POST">
-            <input type="hidden" name="plan" value="review_credit" />
-            <button className="btn-game">Buy a review</button>
-          </form>
-        ) : (
-          <Link href="/signup" className="btn-game">Sign up to buy</Link>
-        )}
-      </div>
       {user && (
-        <form action="/api/stripe/portal" method="POST" className="mt-6">
+        <form action="/api/stripe/portal" method="POST" className="mt-6 text-center">
           <button className="text-sm text-muted underline hover:text-chalk">Manage my subscription</button>
         </form>
       )}
