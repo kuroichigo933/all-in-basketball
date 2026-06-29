@@ -56,6 +56,7 @@ export async function POST(request: Request) {
     customer: customerId,
     mode: "subscription",
     line_items: [{ price, quantity: 1 }],
+    allow_promotion_codes: true,
     client_reference_id: user.id,
     metadata: { supabase_user_id: user.id, plan },
     success_url: `${SITE}/dashboard?upgraded=1`,

@@ -21,7 +21,9 @@ export default async function Onboarding() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const { data: profile } = await supabase.from("profiles").select("onboarded").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("onboarded, tier, role").eq("id", user.id).single();
+  
+  if (profile?.tier === "free" && profile?.role !== "coach") redirect("/pricing");
   if (profile?.onboarded) redirect("/dashboard");
 
   return (

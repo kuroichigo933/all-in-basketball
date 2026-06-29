@@ -6,8 +6,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+  
   const { data: profile } = await supabase.from("profiles")
-    .select("full_name, role, onboarded").eq("id", user.id).single();
+    .select("full_name, role, onboarded, tier").eq("id", user.id).single();
+    
+  if (profile?.tier === "free" && profile?.role !== "coach") redirect("/pricing");
   if (profile && !profile.onboarded) redirect("/onboarding");
 
   return (

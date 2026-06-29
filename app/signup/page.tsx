@@ -17,7 +17,9 @@ export default function Signup() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setError("");
-    const { error: signUpError } = await createClient().auth.signUp({
+    
+    const client = createClient();
+    const { error: signUpError } = await client.auth.signUp({
       email, password,
       options: { data: { full_name: name }, emailRedirectTo: `${location.origin}/auth/callback` },
     });
@@ -27,6 +29,9 @@ export default function Signup() {
       setBusy(false); 
       return; 
     }
+
+    // Explicitly refresh the session to ensure cookies are set
+    await client.auth.refreshSession();
 
     try {
       const res = await fetch("/api/stripe/checkout", {
