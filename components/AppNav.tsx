@@ -18,7 +18,10 @@ export default function AppNav({ role, name }: { role: string; name: string }) {
   const router = useRouter();
   const links = [...LINKS];
   if (role === "parent") links.push({ href: "/family", label: "My Players" });
-  if (role === "coach") links.push({ href: "/coach", label: "Coach Desk" });
+  if (role === "coach") {
+    links.push({ href: "/coach", label: "Coach Desk" });
+    links.push({ href: "/ai-tracker", label: "AI Tracker" });
+  }
 
   async function signOut() {
     await createClient().auth.signOut();
