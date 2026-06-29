@@ -25,7 +25,7 @@ export default async function Dashboard() {
   return (
     <>
       <div className="flex items-start justify-between">
-        <PageTitle kicker="Locker room" title={`Let's keep grinding ${profile?.full_name || "hooper"}`} />
+        <PageTitle kicker="Locker room" title={`Let's keep grinding ${profile?.full_name || user?.user_metadata?.full_name || "hooper"}`} />
         <TierPill tier={(profile?.tier ?? "free") as Tier} />
       </div>
 

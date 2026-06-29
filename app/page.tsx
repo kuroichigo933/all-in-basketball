@@ -32,14 +32,16 @@ export default function Landing() {
         <div className="mt-10 lg:mt-0 relative aspect-[4/3] w-full overflow-hidden rounded-card border border-line shadow-2xl bg-raised">
           <video
             src="/api/video/1BlXqo_s5yClB_BSiV4NSpdCW9diJ5qfy"
-            autoPlay
+            controls
             loop
             muted
             playsInline
+            preload="metadata"
             controlsList="nodownload"
-            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+            onContextMenu={(e) => e.preventDefault()}
+            className="absolute inset-0 h-full w-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-background/20 to-transparent" />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/20 to-transparent" />
         </div>
       </section>
 

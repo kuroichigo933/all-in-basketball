@@ -15,7 +15,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
-      <AppNav role={profile?.role ?? "player"} name={profile?.full_name ?? ""} />
+      <AppNav role={profile?.role ?? "player"} name={profile?.full_name || user?.user_metadata?.full_name || ""} />
       <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
     </div>
   );
