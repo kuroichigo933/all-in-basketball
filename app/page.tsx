@@ -38,7 +38,6 @@ export default function Landing() {
             playsInline
             preload="metadata"
             controlsList="nodownload"
-            onContextMenu={(e) => e.preventDefault()}
             className="absolute inset-0 h-full w-full object-cover"
           />
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/20 to-transparent" />
