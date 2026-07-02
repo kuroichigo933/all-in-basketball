@@ -342,3 +342,22 @@ create policy "owner and coach read review videos" on storage.objects for select
     and ((storage.foldername(name))[1] = auth.uid()::text or is_coach()));
 create policy "coach uploads replies" on storage.objects for insert
   with check (bucket_id = 'review-videos' and is_coach());
+
+-- ---------- Completed Drills ----------
+create table completed_drills (
+  user_id uuid not null references profiles on delete cascade,
+  drill_id text not null,
+  completed_at timestamptz not null default now(),
+  primary key (user_id, drill_id)
+);
+
+alter table completed_drills enable row level security;
+
+create policy "Users can read own completed drills" on completed_drills
+  for select using (user_id = auth.uid());
+
+create policy "Users can insert own completed drills" on completed_drills
+  for insert with check (user_id = auth.uid());
+
+create policy "Users can update own completed drills" on completed_drills
+  for update using (user_id = auth.uid());

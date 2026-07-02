@@ -1,6 +1,7 @@
 import { PageTitle } from "@/components/ui";
 import { getDrillLibrary } from "@/lib/google-drive";
 import DrillVideoCard from "@/components/DrillVideoCard";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,14 @@ function sortTiers<T extends { tier: string }>(tiers: T[]): T[] {
 }
 
 export default async function Library() {
-  const categories = await getDrillLibrary();
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const [{ data: completions }, categories] = await Promise.all([
+    supabase.from("completed_drills").select("drill_id").eq("user_id", user?.id || ""),
+    getDrillLibrary(),
+  ]);
+
+  const completedIds = new Set((completions ?? []).map((c) => c.drill_id));
 
   if (categories.length === 0) {
     return (
@@ -50,6 +58,7 @@ export default async function Library() {
                         drill={drill}
                         category={cat.category}
                         tier={tier}
+                        completed={completedIds.has(drill.id)}
                       />
                     ))}
                   </div>

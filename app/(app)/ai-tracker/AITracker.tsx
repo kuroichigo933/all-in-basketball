@@ -40,7 +40,7 @@ export default function AITracker() {
       // 3. Load Object Detector (for the ball)
       const objectDetector = await ObjectDetector.createFromOptions(vision, {
         baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.task",
+          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite",
           delegate: "GPU"
         },
         scoreThreshold: 0.5,

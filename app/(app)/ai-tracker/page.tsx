@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { PageTitle } from "@/components/ui";
 import AITracker from "./AITracker";
 
+export const dynamic = "force-dynamic";
+
 export default async function AITrackerPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -11,7 +13,7 @@ export default async function AITrackerPage() {
   const { data: profile } = await supabase.from("profiles")
     .select("role").eq("id", user.id).single();
   
-  if (profile?.role !== "coach") redirect("/dashboard");
+  // if (profile?.role !== "coach") redirect("/dashboard");
 
   return (
     <>

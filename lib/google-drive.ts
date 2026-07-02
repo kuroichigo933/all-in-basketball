@@ -24,6 +24,7 @@ export type DrillFile = {
   videoUrl: string;
   mimeType: string;
   checklist?: string[];
+  thumbnailUrl?: string;
 };
 
 export type DrillTier = {
@@ -36,16 +37,24 @@ export type DrillCategory = {
   tiers: DrillTier[];
 };
 
+// Token cache variables
+let cachedToken: string | null = null;
+let tokenExpiresAt = 0; // Epoch timestamp in seconds
+
 async function getAccessToken(): Promise<string> {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const rawKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-  console.log("[Drive] getAccessToken — email:", email ? email : "MISSING");
-  console.log("[Drive] getAccessToken — key present:", !!rawKey, rawKey ? `(${rawKey.slice(0, 40)}...)` : "");
-
   if (!email || !rawKey) throw new Error("Missing GOOGLE_SERVICE_ACCOUNT_EMAIL or GOOGLE_PRIVATE_KEY");
 
   const now = Math.floor(Date.now() / 1000);
+
+  // Use cached token if still valid (with a 60 second safety buffer)
+  if (cachedToken && tokenExpiresAt > now + 60) {
+    return cachedToken;
+  }
+
+  console.log("[Drive] Fetching NEW Google access token (no valid cached token found)...");
   const header = { alg: "RS256", typ: "JWT" };
   const payload = {
     iss: email,
@@ -94,13 +103,20 @@ async function getAccessToken(): Promise<string> {
     console.error("[Drive] token error detail:", JSON.stringify(json));
     throw new Error(`Drive auth failed: ${JSON.stringify(json)}`);
   }
+
+  // Cache the new token
+  cachedToken = json.access_token;
+  const expiresIn = json.expires_in || 3600;
+  tokenExpiresAt = Math.floor(Date.now() / 1000) + expiresIn;
+  console.log(`[Drive] Cached NEW token. Expiration set to ${expiresIn} seconds from now.`);
+
   return json.access_token;
 }
 
 async function listChildren(folderId: string, token: string, label = folderId): Promise<any[]> {
   const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
     `'${folderId}' in parents and trashed = false`
-  )}&fields=files(id,name,mimeType)&orderBy=name&pageSize=200`;
+  )}&fields=files(id,name,mimeType,thumbnailLink)&orderBy=name&pageSize=200`;
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -114,7 +130,7 @@ async function listChildren(folderId: string, token: string, label = folderId): 
   }
 
   const files: any[] = json.files ?? [];
-  console.log(`[Drive] listChildren(${label}) — ${files.length} item(s):`, files.map((f) => `${f.name} [${f.mimeType}]`).join(", ") || "(empty)");
+  // Silenced the noisy directory listing log here
   return files;
 }
 
@@ -282,7 +298,7 @@ function findChecklistForDrill(drillName: string, originalFileName: string, chec
   return [];
 }
 
-export async function getDrillLibrary(): Promise<DrillCategory[]> {
+export async function getDrillLibrary(includeChecklists: boolean = false): Promise<DrillCategory[]> {
   const rootId = process.env.GOOGLE_DRIVE_FOLDER_ID;
   console.log("[Drive] getDrillLibrary — rootId:", rootId ?? "MISSING");
 
@@ -323,15 +339,11 @@ export async function getDrillLibrary(): Promise<DrillCategory[]> {
       const videoFiles = files.filter((f) => f.mimeType && f.mimeType.startsWith("video/"));
       
       const checklistMap: { [key: string]: string[] } = {};
-      if (docFiles.length === 0) {
-        console.log(`[Drive] ⚠️ No checklist document/spreadsheet found in "${cat.name}/${tier.name}"`);
-      } else {
+      if (includeChecklists && docFiles.length > 0) {
         for (const doc of docFiles) {
           try {
-            console.log(`[Drive] 🔍 Found checklist file: "${doc.name}" in "${cat.name}/${tier.name}"`);
             const docText = await exportDriveFileAsText(doc.id, doc.mimeType, token);
             const parsed = parseGoogleDocChecklist(docText);
-            console.log(`[Drive] 📄 Parsed ${Object.keys(parsed).length} keys from checklist file "${doc.name}"`);
             Object.assign(checklistMap, parsed);
           } catch (err) {
             console.error(`[Drive] ❌ Failed to fetch/parse doc/sheet checklist for ${doc.name} (${doc.id}):`, err);
@@ -342,16 +354,13 @@ export async function getDrillLibrary(): Promise<DrillCategory[]> {
       const drills: DrillFile[] = videoFiles.map((f) => {
         const drillName = formatDrillName(f.name);
         const checklist = findChecklistForDrill(drillName, f.name, checklistMap);
-        if (checklist && checklist.length > 0) {
-          console.log(`[Drive] ✅ Matched checklist for drill "${drillName}" (${checklist.length} items)`);
-        } else {
-          console.log(`[Drive] ⚠️ No checklist match found for drill "${drillName}" (using fallback)`);
-        }
+        
         return {
           id: f.id,
           name: drillName,
           videoUrl: `/api/video/${f.id}`,
           mimeType: f.mimeType,
+          thumbnailUrl: f.thumbnailLink,
           ...(checklist && checklist.length > 0 ? { checklist } : {}),
         };
       });
@@ -397,4 +406,61 @@ export async function getVideoStream(fileId: string, range?: string): Promise<{
     contentRange: contentRange ?? undefined,
     status: res.status,
   };
+}
+
+export async function getChecklistsForSpecificDrills(drills: { id: string, name: string, category: string, tier: string }[]): Promise<Record<string, string[]>> {
+  const rootId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  if (!rootId || drills.length === 0) return {};
+
+  let token: string;
+  try {
+    token = await getAccessToken();
+  } catch (err) {
+    return {};
+  }
+
+  const FOLDER = "application/vnd.google-apps.folder";
+
+  // Group drills by category and tier to avoid duplicate folder lookups
+  const categoryTierPairs = new Set(drills.map(d => `${d.category}|${d.tier}`));
+  
+  const checklistMap: { [key: string]: string[] } = {};
+
+  const categoryFolders = (await listChildren(rootId, token, "root")).filter((f) => f.mimeType === FOLDER);
+
+  for (const pair of Array.from(categoryTierPairs)) {
+    const [catName, tierName] = pair.split("|");
+    const catFolder = categoryFolders.find(f => f.name === catName);
+    if (!catFolder) continue;
+
+    const tierFolders = (await listChildren(catFolder.id, token, catName)).filter((f) => f.mimeType === FOLDER);
+    const tierFolder = tierFolders.find(f => f.name === tierName);
+    if (!tierFolder) continue;
+
+    const files = (await listChildren(tierFolder.id, token, `${catName}/${tierName}`)).filter((f) => f.mimeType !== FOLDER);
+    const docFiles = files.filter(
+        (f) =>
+          f.mimeType === "application/vnd.google-apps.document" ||
+          f.mimeType === "application/vnd.google-apps.spreadsheet"
+    );
+
+    for (const doc of docFiles) {
+      try {
+        const docText = await exportDriveFileAsText(doc.id, doc.mimeType, token);
+        const parsed = parseGoogleDocChecklist(docText);
+        Object.assign(checklistMap, parsed);
+      } catch (err) {}
+    }
+  }
+
+  // Now map the requested drills to the parsed checklists
+  const results: Record<string, string[]> = {};
+  for (const d of drills) {
+    const checklist = findChecklistForDrill(d.name, d.name, checklistMap);
+    if (checklist && checklist.length > 0) {
+      results[d.id] = checklist;
+    }
+  }
+
+  return results;
 }

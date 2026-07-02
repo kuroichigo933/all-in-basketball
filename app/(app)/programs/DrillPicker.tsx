@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { DrillCategory, DrillFile } from "@/lib/google-drive";
+import { fetchChecklistsForQueueAction } from "@/app/(app)/actions";
 
 type QueueItem = DrillFile & { category: string; tier: string };
 
@@ -15,6 +16,7 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
   // Play session options
   const [playMode, setPlayMode] = useState<"continuous" | "break" | null>(null);
   const [showModeSelect, setShowModeSelect] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [showChecklist, setShowChecklist] = useState(false);
   const [checkedItems, setCheckedItems] = useState<{ [index: number]: boolean }>({});
 
@@ -23,6 +25,25 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
     setShowChecklist(false);
     setCheckedItems({});
   };
+
+  async function startSession(mode: "continuous" | "break") {
+    setIsStarting(true);
+    try {
+      const payloads = queue.map(d => ({ id: d.id, name: d.name, category: d.category, tier: d.tier }));
+      const checklistMap = await fetchChecklistsForQueueAction(payloads);
+      
+      setQueue(q => q.map(item => ({
+        ...item,
+        checklist: checklistMap[item.id] || item.checklist || []
+      })));
+
+      setPlayMode(mode);
+      setShowModeSelect(false);
+      handleSetPlaying(0);
+    } finally {
+      setIsStarting(false);
+    }
+  }
 
   function toggle(drill: DrillFile, category: string, tier: string) {
     setQueue((q) => {
@@ -44,18 +65,17 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
 
   if (playing !== null) {
     const drill = queue[playing];
-    const checklistItems = (drill.checklist && drill.checklist.length > 0)
-      ? drill.checklist
-      : ["Practice " + drill.name];
+    const checklistItems = drill.checklist || [];
+    const hasRealChecklist = checklistItems.length > 0;
 
     const handleVideoEnded = () => {
-      if (playMode === "continuous") {
+      if (playMode === "continuous" || !hasRealChecklist) {
         if (playing < queue.length - 1) {
           handleSetPlaying(playing + 1);
         } else {
           handleSetPlaying(null);
         }
-      } else if (playMode === "break") {
+      } else if (playMode === "break" && hasRealChecklist) {
         setShowChecklist(true);
         setCheckedItems({});
       }
@@ -261,27 +281,27 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
             <div className="space-y-3">
               <button
                 type="button"
-                onClick={() => {
-                  setPlayMode("continuous");
-                  setShowModeSelect(false);
-                  handleSetPlaying(0);
-                }}
-                className="w-full text-left rounded-card border border-line p-4 hover:border-game hover:bg-game/5 transition-colors group"
+                onClick={() => startSession("continuous")}
+                disabled={isStarting}
+                className="w-full text-left rounded-card border border-line p-4 hover:border-game hover:bg-game/5 transition-colors group disabled:opacity-50 disabled:pointer-events-none"
               >
-                <p className="font-bold text-chalk group-hover:text-game">Continuous Play</p>
+                <div className="flex items-center justify-between">
+                  <p className="font-bold text-chalk group-hover:text-game">Continuous Play</p>
+                  {isStarting && <span className="text-xs text-game animate-pulse">Loading...</span>}
+                </div>
                 <p className="text-xs text-muted mt-1">Videos play one after another automatically as soon as they finish.</p>
               </button>
               
               <button
                 type="button"
-                onClick={() => {
-                  setPlayMode("break");
-                  setShowModeSelect(false);
-                  handleSetPlaying(0);
-                }}
-                className="w-full text-left rounded-card border border-line p-4 hover:border-game hover:bg-game/5 transition-colors group"
+                onClick={() => startSession("break")}
+                disabled={isStarting}
+                className="w-full text-left rounded-card border border-line p-4 hover:border-game hover:bg-game/5 transition-colors group disabled:opacity-50 disabled:pointer-events-none"
               >
-                <p className="font-bold text-chalk group-hover:text-game">Break to Practice Between Videos</p>
+                <div className="flex items-center justify-between">
+                  <p className="font-bold text-chalk group-hover:text-game">Break to Practice Between Videos</p>
+                  {isStarting && <span className="text-xs text-game animate-pulse">Loading...</span>}
+                </div>
                 <p className="text-xs text-muted mt-1">Pause after each video to practice the moves shown in the video! Use our recommended list or until you feel comforable.</p>
               </button>
             </div>

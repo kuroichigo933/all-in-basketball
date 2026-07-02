@@ -50,10 +50,10 @@ export default function AppNav({ role, name }: { role: string; name: string }) {
         </div>
       </header>
       {/* bottom tab bar (mobile / at the court) */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-line bg-asphalt/95 backdrop-blur md:hidden">
-        {links.slice(0, 6).map((l) => (
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-line bg-asphalt/95 backdrop-blur md:hidden" style={{ scrollbarWidth: "none" }}>
+        {links.map((l) => (
           <Link key={l.href} href={l.href}
-            className={`py-3 text-center text-[11px] font-semibold ${pathname.startsWith(l.href) ? "text-game" : "text-muted"}`}>
+            className={`flex-1 whitespace-nowrap px-3 py-3 text-center text-[11px] font-semibold ${pathname.startsWith(l.href) ? "text-game" : "text-muted"}`}>
             {l.label}
           </Link>
         ))}

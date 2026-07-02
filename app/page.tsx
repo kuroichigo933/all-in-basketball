@@ -61,12 +61,15 @@ export default function Landing() {
             <p className="text-xs uppercase tracking-[0.25em] text-game">Lead Coach</p>
             <h2 className="display mt-2 text-4xl md:text-5xl">Sanar</h2>
             <p className="mt-2 text-sm font-semibold uppercase tracking-wider text-wood">
-            NBA G League Capital City Go-Go · Iraqi National Team   15+ years coaching
+            NBA G League Capital City Go-Go Practice Player · Former Iraqi National Team Player
+            </p>
+            <p className="mt-2 text-sm font-semibold uppercase tracking-wider text-wood">
+            15+ years coaching
             </p>
             <p className="mt-5 text-muted">
-              Sanar played for the NBA G League Capital City Go-Go practice squad and the Iraqi 
-              National Team. He has spent more than a decade developing hoopers at every level — from 
-              first-time middle schoolers learning a proper stance, to college and pro players 
+              Sanar was a member of the NBA G League Capital City Go-Go practice squad and played for
+              the Iraqi National Team. He has spent more than a decade developing hoopers at every level,
+              from first-time middle schoolers learning a proper stance, to college and pro players 
               sharpening their game in the off-season.
             </p>
             <p className="mt-4 text-muted">

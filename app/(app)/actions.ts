@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getChecklistsForSpecificDrills } from "@/lib/google-drive";
 
 async function requireUser() {
   const supabase = createClient();
@@ -181,4 +182,47 @@ export async function redeemChildInvite(code: string) {
   });
   revalidatePath("/family");
   return { ok: true };
+}
+
+// ---------- Drill Completions ----------
+export async function completeDrillAction(drillId: string) {
+  try {
+    const { supabase, user } = await requireUser();
+    console.log(`[Drill Action] Recording completion for user: ${user.id}, drill: ${drillId}`);
+
+    const { error: upsertError } = await supabase.from("completed_drills").upsert({
+      user_id: user.id,
+      drill_id: drillId,
+      completed_at: new Date().toISOString()
+    });
+
+    if (upsertError) {
+      console.error("[Drill Action] ERROR inserting completion:", upsertError);
+      return { error: upsertError.message };
+    }
+
+    const admin = createAdminClient();
+    const { error: rpcError } = await admin.rpc("bump_activity", { p_user: user.id, p_xp: 10 });
+    if (rpcError) {
+      console.error("[Drill Action] ERROR bumping user activity/streak:", rpcError);
+    }
+
+    await checkStreakBadges(user.id);
+
+    revalidatePath("/dashboard");
+    revalidatePath("/library");
+    revalidatePath("/programs");
+
+    console.log("[Drill Action] Successfully recorded drill completion!");
+    return { ok: true };
+  } catch (error: any) {
+    console.error("[Drill Action] Unhandled Exception:", error);
+    return { error: error.message };
+  }
+}
+
+// ---------- Session Prep ----------
+export async function fetchChecklistsForQueueAction(drills: { id: string, name: string, category: string, tier: string }[]) {
+  await requireUser();
+  return await getChecklistsForSpecificDrills(drills);
 }

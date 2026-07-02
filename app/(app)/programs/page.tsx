@@ -15,7 +15,7 @@ export default async function Programs() {
   ]);
   const enrolled = new Map((enrollments ?? []).map((e) => [e.program_id, e.current_day]));
   const goals = profile?.goals ?? [];
-  const driveCategories = await getDrillLibrary();
+  const driveCategories = await getDrillLibrary(true); // Fetch checklists only for the Train tab
 
   return (
     <>
