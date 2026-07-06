@@ -3,6 +3,10 @@ import { PageTitle } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
 import ReviewUpload from "./ReviewUpload";
 
+// Credit balance changes out of band (Stripe webhooks, manual grants), so this
+// page must always read it live — never from Next's Data Cache.
+export const dynamic = "force-dynamic";
+
 export default async function Review() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();

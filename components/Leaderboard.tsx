@@ -22,8 +22,9 @@ export default function Leaderboard({ items }: { items: LeaderboardItem[] }) {
     return `${first} ${lastInitial.toUpperCase()}.`;
   }
 
-  // Sort and filter top 10
+  // Only rank people with at least 1 day on the active metric, then top 10.
   const sortedItems = [...items]
+    .filter((item) => (activeTab === "current" ? item.currentStreak : item.longestStreak) >= 1)
     .sort((a, b) => {
       if (activeTab === "current") {
         return b.currentStreak - a.currentStreak;
