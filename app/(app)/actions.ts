@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getChecklistsForSpecificDrills } from "@/lib/google-drive";
+import {
+  getChecklistsForSpecificDrills,
+  createResumableUploadSession,
+} from "@/lib/google-drive";
+import { sendReviewEmail } from "@/lib/email";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 async function requireUser() {
   const supabase = createClient();
@@ -96,13 +102,76 @@ async function checkStreakBadges(userId: string) {
 }
 
 // ---------- Film Room ----------
-export async function submitReview(videoPath: string, focus: string, notes: string) {
+// Step 1: verify the user has a credit, then open a Drive resumable upload
+// session. The browser uploads the bytes directly to the returned URI.
+export async function startFilmUpload(fileName: string, mimeType: string) {
+  const { user } = await requireUser();
+  const admin = createAdminClient();
+  const { data: credits } = await admin
+    .from("review_credits").select("balance").eq("user_id", user.id).maybeSingle();
+  if (!credits || credits.balance < 1) {
+    return { error: "You need a review credit. Get one on the pricing page." };
+  }
+  try {
+    const sessionUri = await createResumableUploadSession(fileName, mimeType);
+    return { sessionUri };
+  } catch (err: any) {
+    console.error("[Film] startFilmUpload failed:", err);
+    return { error: "Couldn't start the upload. Try again in a moment." };
+  }
+}
+
+// Step 2: after the browser finishes uploading, share the file with the coach,
+// email the details, then spend a credit and record the submission.
+// A credit is only spent once the email has actually been sent.
+export async function finalizeFilmReview(
+  fileId: string,
+  focus: string,
+  otherText: string,
+  notes: string
+) {
   const { supabase, user } = await requireUser();
   const admin = createAdminClient();
-  const { data: credits } = await admin.from("review_credits").select("balance").eq("user_id", user.id).single();
-  if (!credits || credits.balance < 1) return { error: "You need a review credit. Get one on the pricing page." };
+
+  const { data: credits } = await admin
+    .from("review_credits").select("balance").eq("user_id", user.id).maybeSingle();
+  if (!credits || credits.balance < 1) {
+    return { error: "You need a review credit. Get one on the pricing page." };
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles").select("full_name, age_group, skill_level").eq("id", user.id).single();
+
+  const focusLabel = focus === "other" ? `Other: ${otherText.trim() || "—"}` : focus;
+
+  // Record the submission first so the coach email can link to the (coach-gated)
+  // review page where the footage streams privately through the app proxy.
+  const { data: inserted, error: insErr } = await supabase.from("review_submissions")
+    .insert({ user_id: user.id, video_path: fileId, focus: focusLabel, notes })
+    .select("id").single();
+  if (insErr || !inserted) {
+    console.error("[Film] finalizeFilmReview insert failed:", insErr);
+    return { error: "Couldn't save your submission. Please try again." };
+  }
+
+  try {
+    await sendReviewEmail({
+      replyTo: user.email ?? "",
+      playerName: profile?.full_name ?? "",
+      ageGroup: profile?.age_group,
+      skillLevel: profile?.skill_level,
+      focus: focusLabel,
+      notes,
+      videoLink: `${SITE_URL}/coach/reviews/${inserted.id}`,
+    });
+  } catch (err: any) {
+    console.error("[Film] finalizeFilmReview email failed:", err);
+    // Roll back so no credit is charged and no orphan submission remains.
+    await admin.from("review_submissions").delete().eq("id", inserted.id);
+    return { error: "Your clip uploaded, but the email failed to send. No credit was used — please try again." };
+  }
+
   await admin.from("review_credits").update({ balance: credits.balance - 1 }).eq("user_id", user.id);
-  await supabase.from("review_submissions").insert({ user_id: user.id, video_path: videoPath, focus, notes });
   await awardBadge(user.id, "first_review");
   revalidatePath("/review");
   return { ok: true };

@@ -1,13 +1,27 @@
 import Image from "next/image";
 import { PageTitle } from "@/components/ui";
+import { createClient } from "@/lib/supabase/server";
 import ReviewUpload from "./ReviewUpload";
 
-export default function Review() {
+export default async function Review() {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  let balance = 0;
+  if (user) {
+    const { data: credits } = await supabase
+      .from("review_credits").select("balance").eq("user_id", user.id).maybeSingle();
+    balance = credits?.balance ?? 0;
+  }
+
   return (
     <>
       <PageTitle kicker="Film Room" title="Get coached on your film" />
+      <p className="-mt-2 mb-4 text-sm text-muted">
+        <span className="score font-semibold text-chalk">{balance}</span> review
+        {balance === 1 ? "" : "s"} left
+      </p>
       <div className="grid gap-6 lg:grid-cols-2">
-        <ReviewUpload />
+        <ReviewUpload balance={balance} />
 
         <section className="card overflow-hidden">
           <div className="p-5 pb-0">

@@ -58,7 +58,8 @@ async function getAccessToken(): Promise<string> {
   const header = { alg: "RS256", typ: "JWT" };
   const payload = {
     iss: email,
-    scope: "https://www.googleapis.com/auth/drive.readonly",
+    // Full drive scope (covers read for the library + write for film uploads).
+    scope: "https://www.googleapis.com/auth/drive",
     aud: "https://oauth2.googleapis.com/token",
     exp: now + 3600,
     iat: now,
@@ -336,7 +337,10 @@ export async function getDrillLibrary(includeChecklists: boolean = false): Promi
           f.mimeType === "application/vnd.google-apps.document" ||
           f.mimeType === "application/vnd.google-apps.spreadsheet"
       );
-      const videoFiles = files.filter((f) => f.mimeType && f.mimeType.startsWith("video/"));
+      // Files named "XXXX..." are hidden from the library and train/session builder.
+      const videoFiles = files.filter(
+        (f) => f.mimeType && f.mimeType.startsWith("video/") && !/^xxxx/i.test(f.name)
+      );
       
       const checklistMap: { [key: string]: string[] } = {};
       if (includeChecklists && docFiles.length > 0) {
@@ -464,3 +468,45 @@ export async function getChecklistsForSpecificDrills(drills: { id: string, name:
 
   return results;
 }
+
+// ---------- Film upload (Shared Drive) ----------
+
+// Start a resumable upload session in the Shared Drive film folder and return
+// the session URI. The browser then PUTs the file bytes directly to this URI,
+// which keeps large videos off the (4.5 MB-capped) serverless request path.
+export async function createResumableUploadSession(
+  fileName: string,
+  mimeType: string
+): Promise<string> {
+  const folderId = process.env.GOOGLE_DRIVE_UPLOAD_FOLDER_ID;
+  if (!folderId) throw new Error("Missing GOOGLE_DRIVE_UPLOAD_FOLDER_ID");
+
+  const token = await getAccessToken();
+  const res = await fetch(
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Type": mimeType || "video/mp4",
+      },
+      body: JSON.stringify({ name: fileName, parents: [folderId] }),
+    }
+  );
+
+  if (!res.ok) {
+    const detail = await res.text();
+    console.error(`[Drive] createResumableUploadSession — HTTP ${res.status}:`, detail);
+    throw new Error(`Drive upload session failed: ${res.status}`);
+  }
+
+  const location = res.headers.get("location");
+  if (!location) throw new Error("Drive did not return an upload session URI");
+  return location;
+}
+
+// NOTE: uploaded film is intentionally NEVER shared on Drive (no per-file
+// permissions, no "anyone with link"). It stays private to the service account
+// + Shared Drive members (admins). Coaches watch it only through the
+// role-gated app proxy (/api/video/[fileId]), never via a Drive link.

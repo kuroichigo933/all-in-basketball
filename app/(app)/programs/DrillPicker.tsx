@@ -8,6 +8,15 @@ type QueueItem = DrillFile & { category: string; tier: string };
 
 const TIER_ORDER = ["Beginner", "Intermediate", "Expert"];
 
+// Shown between videos in "Break to Practice" mode when a drill has no
+// specific checklist matched from Drive.
+const DEFAULT_CHECKLIST = [
+  "Rewatch the demo once",
+  "Walk through the move slowly — 5 reps",
+  "Run it at game speed — 10 reps",
+  "Finish with 5 clean reps in a row",
+];
+
 export default function DrillPicker({ categories }: { categories: DrillCategory[] }) {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [playing, setPlaying] = useState<number | null>(null);
@@ -65,7 +74,10 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
 
   if (playing !== null) {
     const drill = queue[playing];
-    const checklistItems = drill.checklist || [];
+    // Fall back to a generic practice list when Drive has no matched checklist,
+    // so "Break to Practice" mode always shows steps between videos.
+    const checklistItems =
+      drill.checklist && drill.checklist.length > 0 ? drill.checklist : DEFAULT_CHECKLIST;
     const hasRealChecklist = checklistItems.length > 0;
 
     const handleVideoEnded = () => {
