@@ -27,6 +27,7 @@ export type DrillFile = {
   mimeType: string;
   checklist?: string[];
   thumbnailUrl?: string;
+  createdTime?: string; // Drive file creation (ISO) — drives the 7-day early-access lock
 };
 
 export type DrillTier = {
@@ -43,7 +44,7 @@ export type DrillCategory = {
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0; // Epoch timestamp in seconds
 
-async function getAccessToken(): Promise<string> {
+export async function getAccessToken(): Promise<string> {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const rawKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
@@ -60,8 +61,8 @@ async function getAccessToken(): Promise<string> {
   const header = { alg: "RS256", typ: "JWT" };
   const payload = {
     iss: email,
-    // Full drive scope (covers read for the library + write for film uploads).
-    scope: "https://www.googleapis.com/auth/drive",
+    // Drive (read-only drill library) + Sheets (append feedback rows).
+    scope: "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets",
     aud: "https://oauth2.googleapis.com/token",
     exp: now + 3600,
     iat: now,
@@ -119,7 +120,7 @@ async function getAccessToken(): Promise<string> {
 async function listChildren(folderId: string, token: string, label = folderId): Promise<any[]> {
   const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
     `'${folderId}' in parents and trashed = false`
-  )}&fields=files(id,name,mimeType,thumbnailLink)&orderBy=name&pageSize=200`;
+  )}&fields=files(id,name,mimeType,thumbnailLink,createdTime)&orderBy=name&pageSize=200`;
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -311,6 +312,7 @@ export async function getDrillLibrary(includeChecklists: boolean = false): Promi
               videoUrl: `/api/video/${f.id}`,
               mimeType: f.mimeType,
               thumbnailUrl: f.thumbnailLink,
+              createdTime: f.createdTime,
               ...(checklist && checklist.length > 0 ? { checklist } : {}),
             };
           });
@@ -337,6 +339,24 @@ export const getDrillLibraryCached = unstable_cache(
   ["drill-library"],
   { revalidate: 600, tags: ["drill-library"] }
 );
+
+// Early access: drills uploaded to Drive within the last 7 days are Professional
+// (and coach) only. For anyone else (Basic tier), drop them so they're hidden
+// until they age out. `canSeeNew` should be true for coaches and professional tier.
+const EARLY_ACCESS_DAYS = 7;
+export function filterEarlyAccess(categories: DrillCategory[], canSeeNew: boolean): DrillCategory[] {
+  if (canSeeNew) return categories;
+  const cutoff = Date.now() - EARLY_ACCESS_DAYS * 24 * 60 * 60 * 1000;
+  const isFresh = (d: DrillFile) => !!d.createdTime && new Date(d.createdTime).getTime() >= cutoff;
+  return categories
+    .map((c) => ({
+      category: c.category,
+      tiers: c.tiers
+        .map((t) => ({ tier: t.tier, drills: t.drills.filter((d) => !isFresh(d)) }))
+        .filter((t) => t.drills.length > 0),
+    }))
+    .filter((c) => c.tiers.length > 0);
+}
 
 // Stream a Drive file through the server (keeps videos private, no Drive UI).
 // Forwards Range header so seeking works correctly.

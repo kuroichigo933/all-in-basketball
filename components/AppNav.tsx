@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/progress", label: "Progress" },
   { href: "/review", label: "Film Room" },
   { href: "/book", label: "Book" },
+  { href: "/feedback", label: "Feedback" },
 ];
 
 export default function AppNav({ role, name }: { role: string; name: string }) {

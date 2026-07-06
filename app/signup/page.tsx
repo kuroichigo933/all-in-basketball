@@ -82,7 +82,7 @@ export default function Signup() {
                   </div>
                   <span className="text-sm font-medium text-game">$9.99/mo</span>
                 </div>
-                <p className="mt-2 pl-7 text-xs text-muted">Full drill library, all follow-along programs & 1 coach review/mo.</p>
+                <p className="mt-2 pl-7 text-xs text-muted">Full drill library & all follow-along programs.</p>
               </label>
 
               <label className={`block cursor-pointer rounded-card border p-4 transition-colors ${plan === "professional" ? "border-game bg-game/5" : "border-line hover:border-game/50"}`}>

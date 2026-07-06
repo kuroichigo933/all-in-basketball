@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Stat, PageTitle, TierPill } from "@/components/ui";
 import type { Tier } from "@/lib/tiers";
-import { getDrillLibrary } from "@/lib/google-drive";
+import { getDrillLibraryCached, filterEarlyAccess } from "@/lib/google-drive";
 import JumpBackInCard, { RecommendedDrill } from "@/components/JumpBackInCard";
 import Leaderboard, { LeaderboardItem } from "@/components/Leaderboard";
 
@@ -21,7 +21,7 @@ export default async function Dashboard() {
     { data: dbDrillsResult },
     { data: rawLeaderboard }
   ] = await Promise.all([
-    supabase.from("profiles").select("full_name, tier, goals").eq("id", user!.id).single(),
+    supabase.from("profiles").select("full_name, tier, role, goals").eq("id", user!.id).single(),
     supabase.from("user_stats").select("*").eq("user_id", user!.id).single(),
     supabase.from("program_enrollments")
       .select("current_day, programs(id, title, weeks)").eq("user_id", user!.id),
@@ -46,8 +46,9 @@ export default async function Dashboard() {
   const fullName = profile?.full_name || user?.user_metadata?.full_name || "hooper";
   const firstName = fullName.split(" ")[0];
 
-  // 1. Fetch Google Drive or DB drills
-  const driveCategories = await getDrillLibrary();
+  // 1. Fetch drills — new ones (< 7 days) are Professional/coach only.
+  const canSeeNew = (profile as any)?.role === "coach" || profile?.tier === "professional";
+  const driveCategories = filterEarlyAccess(await getDrillLibraryCached(), canSeeNew);
 
   // 2. Flatten all available drills
   const allDrills: RecommendedDrill[] = [];

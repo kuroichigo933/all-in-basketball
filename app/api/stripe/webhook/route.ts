@@ -6,8 +6,8 @@ import type { Tier } from "@/lib/tiers";
 
 // Professional includes 4 coach film reviews per month, granted on each paid invoice.
 const PROFESSIONAL_MONTHLY_CREDITS = 4;
-// Basic includes 1 coach film review per month.
-const BASIC_MONTHLY_CREDITS = 1;
+// Basic includes NO film reviews — reset to 0 each billing cycle.
+const BASIC_MONTHLY_CREDITS = 0;
 
 function planFromPrice(priceId: string | undefined): Tier {
   if (priceId === process.env.STRIPE_PRICE_PROFESSIONAL) return "professional";

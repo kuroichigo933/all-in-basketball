@@ -126,6 +126,16 @@ GOOGLE_SERVICE_ACCOUNT_EMAIL
 GOOGLE_PRIVATE_KEY        # raw PEM, use \n for newlines in .env.local
 GOOGLE_DRIVE_FOLDER_ID
 ```
+New drills (Drive `createdTime` < 7 days) are Professional/coach only — `filterEarlyAccess()`
+in `lib/google-drive.ts` hides them from Basic-tier users on the library, train, and dashboard.
+
+Optional (feedback → Google Sheet, see `lib/google-sheets.ts`):
+```
+FEEDBACK_SHEET_ID        # spreadsheet id (defaults to the team sheet in code)
+FEEDBACK_SHEET_RANGE     # defaults to "A1" (first sheet)
+```
+Requires the Google Sheets API enabled in the GCP project and the sheet shared with
+`GOOGLE_SERVICE_ACCOUNT_EMAIL` as Editor. Reuses the drill-library service account.
 
 Optional (film-room upload → email, see `lib/email.ts`):
 ```

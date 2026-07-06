@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageTitle } from "@/components/ui";
-import { getDrillLibraryCached } from "@/lib/google-drive";
+import { getDrillLibraryCached, filterEarlyAccess } from "@/lib/google-drive";
 import DrillPicker from "./DrillPicker";
 
 export const dynamic = "force-dynamic";
@@ -10,14 +10,16 @@ export default async function Programs() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const [{ data: profile }, { data: enrollments }] = await Promise.all([
-    supabase.from("profiles").select("goals").eq("id", user!.id).single(),
+    supabase.from("profiles").select("goals, tier, role").eq("id", user!.id).single(),
     supabase.from("program_enrollments").select("program_id, current_day").eq("user_id", user!.id),
   ]);
   const enrolled = new Map((enrollments ?? []).map((e) => [e.program_id, e.current_day]));
   const goals = profile?.goals ?? [];
   // Checklists are loaded on demand when a session starts (fetchChecklistsForQueueAction),
   // so we don't pay for parsing every checklist doc up front here.
-  const driveCategories = await getDrillLibraryCached();
+  // New drills (< 7 days) are Professional/coach only.
+  const canSeeNew = profile?.role === "coach" || profile?.tier === "professional";
+  const driveCategories = filterEarlyAccess(await getDrillLibraryCached(), canSeeNew);
 
   return (
     <>

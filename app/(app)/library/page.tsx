@@ -1,5 +1,5 @@
 import { PageTitle } from "@/components/ui";
-import { getDrillLibraryCached } from "@/lib/google-drive";
+import { getDrillLibraryCached, filterEarlyAccess } from "@/lib/google-drive";
 import DrillLibrary from "@/components/DrillLibrary";
 import { createClient } from "@/lib/supabase/server";
 
@@ -8,11 +8,15 @@ export const dynamic = "force-dynamic";
 export default async function Library() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const [{ data: completions }, categories] = await Promise.all([
+  const [{ data: completions }, { data: profile }, allCategories] = await Promise.all([
     supabase.from("completed_drills").select("drill_id").eq("user_id", user?.id || ""),
+    supabase.from("profiles").select("tier, role").eq("id", user?.id || "").single(),
     getDrillLibraryCached(),
   ]);
 
+  // New drills (uploaded < 7 days ago) are Professional/coach only.
+  const canSeeNew = profile?.role === "coach" || profile?.tier === "professional";
+  const categories = filterEarlyAccess(allCategories, canSeeNew);
   const completedIds = (completions ?? []).map((c) => c.drill_id);
 
   if (categories.length === 0) {

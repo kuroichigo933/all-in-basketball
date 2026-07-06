@@ -57,6 +57,10 @@ export async function POST(request: Request) {
     mode: "subscription",
     line_items: [{ price, quantity: 1 }],
     allow_promotion_codes: true,
+    // Don't force a card when nothing is owed (e.g. a 100%-off code) — the $0
+    // checkout still completes and creates the subscription, so the webhook
+    // grants the chosen tier without a payment method.
+    payment_method_collection: "if_required",
     client_reference_id: user.id,
     metadata: { supabase_user_id: user.id, plan },
     success_url: `${SITE}/dashboard?upgraded=1`,

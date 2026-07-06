@@ -7,6 +7,7 @@ export default function Landing() {
       <header className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-2 px-4">
         <span className="display text-xl text-game">All In</span>
         <nav className="flex items-center gap-3 sm:gap-4">
+          <Link href="/how-it-works" className="text-sm font-semibold text-muted hover:text-chalk">How it Works</Link>
           <Link href="/pricing" className="hidden text-sm font-semibold text-muted hover:text-chalk sm:inline">Pricing</Link>
           <Link href="/login" className="text-sm font-semibold text-muted hover:text-chalk">Log in</Link>
           <Link href="/signup" className="btn-game !py-2 !px-4 text-sm">Sign up</Link>
@@ -32,6 +33,7 @@ export default function Landing() {
         <div className="mt-10 lg:mt-0 relative aspect-[4/3] w-full overflow-hidden rounded-card border border-line shadow-2xl bg-raised">
           <video
             src="/intro.mp4"
+            poster="/intro-poster.jpg"
             controls
             loop
             muted
