@@ -1,4 +1,5 @@
 import Link from "next/link";
+import DemoVideo from "./DemoVideo";
 
 export default function HowItWorks() {
   return (
@@ -13,13 +14,15 @@ export default function HowItWorks() {
         </nav>
       </header>
 
-      <section className="mx-auto max-w-4xl px-4 py-10 sm:py-16">
+      <section className="mx-auto max-w-4xl px-4 py-6 text-center sm:py-8">
         <p className="text-xs uppercase tracking-[0.25em] text-game">How it works</p>
-        <h1 className="display mt-2 text-4xl md:text-5xl">See it in action</h1>
-        <div className="mt-8 flex justify-center overflow-hidden rounded-card border border-line bg-black shadow-2xl">
-          <video src="/demo.mp4" controls playsInline preload="metadata" className="max-h-[75vh] w-auto" />
+        <h1 className="display mt-2 text-3xl md:text-4xl">See it in action</h1>
+        {/* Portrait video (client component) — capped by height so the whole page
+            fits one laptop screen, with an obvious play button. */}
+        <div className="mt-5 flex justify-center">
+          <DemoVideo />
         </div>
-        <div className="mt-8">
+        <div className="mt-6">
           <Link href="/signup" className="btn-game">Get started</Link>
         </div>
       </section>

@@ -9,8 +9,8 @@ const LINKS = [
   { href: "/dashboard", label: "Home" },
   { href: "/library", label: "Drills" },
   { href: "/programs", label: "Train" },
-  { href: "/progress", label: "Progress" },
   { href: "/review", label: "Film Room" },
+  { href: "/progress", label: "Progress" },
   { href: "/book", label: "Book" },
   { href: "/feedback", label: "Feedback" },
 ];
