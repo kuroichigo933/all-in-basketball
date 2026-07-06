@@ -8,7 +8,7 @@ import {
   getChecklistsForSpecificDrills,
   createResumableUploadSession,
 } from "@/lib/google-drive";
-import { sendReviewEmail } from "@/lib/email";
+import { sendReviewEmail, sendBookingEmail } from "@/lib/email";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -193,15 +193,21 @@ export async function claimSubmission(submissionId: string) {
 }
 
 // ---------- Booking ----------
-export async function requestBooking(slotId: string, sessionTypeId: string, note: string) {
-  const { supabase, user } = await requireUser();
-  const admin = createAdminClient();
-  const { data: slot } = await admin.from("availability_slots").select("booked").eq("id", slotId).single();
-  if (!slot || slot.booked) return { error: "That time was just taken. Pick another slot." };
-  await supabase.from("bookings").insert({ slot_id: slotId, user_id: user.id, session_type_id: sessionTypeId, note });
-  await admin.from("availability_slots").update({ booked: true }).eq("id", slotId);
-  revalidatePath("/book");
-  return { ok: true };
+// In-person training request — emails the coach (reply-to = the person's email).
+export async function sendBookingRequest(input: {
+  name: string; email: string; age: string; experience: string; message?: string;
+}) {
+  await requireUser();
+  if (!input.name?.trim() || !input.email?.trim()) {
+    return { error: "Name and email are required." };
+  }
+  try {
+    await sendBookingEmail(input);
+    return { ok: true as const };
+  } catch (err) {
+    console.error("[Booking] email failed:", err);
+    return { error: "Couldn't send your request. Please try again." };
+  }
 }
 
 export async function setBookingStatus(bookingId: string, status: "confirmed" | "completed" | "cancelled") {

@@ -11,11 +11,16 @@ export default async function Review() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   let balance = 0;
+  // TEMP debug — remove once the credits display is confirmed working.
+  const debug: Record<string, unknown> = { userId: user?.id ?? null, userEmail: user?.email ?? null };
   if (user) {
-    const { data: credits } = await supabase
+    const { data: credits, error } = await supabase
       .from("review_credits").select("balance").eq("user_id", user.id).maybeSingle();
     balance = credits?.balance ?? 0;
+    debug.creditsRow = credits;
+    debug.queryError = error?.message ?? null;
   }
+  console.info("[review] credits debug:", JSON.stringify(debug));
 
   return (
     <>
@@ -24,6 +29,10 @@ export default async function Review() {
         <span className="score font-semibold text-chalk">{balance}</span> review
         {balance === 1 ? "" : "s"} left
       </p>
+      {/* TEMP debug — remove once credits display is confirmed. */}
+      <pre className="mb-4 overflow-auto rounded border border-line bg-raised p-3 text-[11px] leading-relaxed text-muted">
+        DEBUG: {JSON.stringify(debug, null, 2)}
+      </pre>
       <div className="grid gap-6 lg:grid-cols-2">
         <ReviewUpload balance={balance} />
 
