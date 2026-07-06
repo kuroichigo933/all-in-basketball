@@ -135,30 +135,16 @@ async function listChildren(folderId: string, token: string, label = folderId): 
   return files;
 }
 
-// "shooting-form-stationary-#1.mp4" → "Form Stationary"
-// "shooting-form-stationary-#2.mp4" → "Form Stationary #2"
-function formatDrillName(filename: string): string {
-  const base = filename.replace(/\.[^.]+$/, ""); // strip extension
-  const parts = base.split("-").map((p) => p.trim()).filter(Boolean);
-  const last2 = parts.slice(-2);
-  // drop #1 only (not #2, #3, ...)
-  const filtered = last2.filter((p) => !/^#?1$/i.test(p));
-  const name = filtered
-    .map((p) => p.replace(/\b([a-z])/g, (c) => c.toUpperCase()))
-    .join(" ")
-    .trim();
-
-  const rawName = name || base;
-
-  // Deduplicate adjacent identical words (e.g. "Beginner Beginner 2" -> "Beginner 2")
-  const words = rawName.split(/\s+/);
-  const deduped: string[] = [];
-  for (let i = 0; i < words.length; i++) {
-    if (i === 0 || words[i].toLowerCase() !== words[i - 1].toLowerCase()) {
-      deduped.push(words[i]);
-    }
-  }
-  return deduped.join(" ");
+// Files are named "<order> - <title>", e.g. "0 - Form Shooting.mp4".
+// The leading number sets the display order; the title is everything after the
+// "<number> -" prefix (the number and dash are not shown). Files without that
+// prefix keep their full name and sort last.
+// "0 - Form Shooting.mp4" → { order: 0, title: "Form Shooting" }
+function parseDrillName(filename: string): { order: number; title: string } {
+  const base = filename.replace(/\.[^.]+$/, "").trim(); // strip extension
+  const m = base.match(/^(\d+)\s*-\s*(.+)$/);
+  if (m) return { order: parseInt(m[1], 10), title: m[2].trim() };
+  return { order: Number.MAX_SAFE_INTEGER, title: base };
 }
 
 async function exportDriveFileAsText(fileId: string, mimeType: string, token: string): Promise<string> {
@@ -199,8 +185,11 @@ export function parseGoogleDocChecklist(text: string): { [videoName: string]: st
   let currentVideoName: string | null = null;
   
   for (const line of lines) {
-    // Check if line starts with a video number, e.g., "1. video_name" or "1) video_name" or just "1.video_name"
-    const videoMatch = line.match(/^\d+\s*[\.\)]\s*(.*)$/i);
+    // A heading is "<number> - <title>" — the same convention as the video
+    // files, e.g. "1 - Beginner 1". Everything until the next heading is its
+    // checklist items. (The spaced dash avoids matching item lines like
+    // "20x each hand …" or "1-2 dribbles".)
+    const videoMatch = line.match(/^\d+\s+-\s+(.+)$/);
     if (videoMatch) {
       let videoName = videoMatch[1].trim();
       // Remove trailing comma if any
@@ -234,68 +223,16 @@ export function parseGoogleDocChecklist(text: string): { [videoName: string]: st
   return result;
 }
 
-function normalizeName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/\.[^/.]+$/, "") // remove extension
-    .replace(/[^a-z0-9]/g, ""); // remove non-alphanumeric
-}
-
-function getWordSet(name: string): Set<string> {
-  const clean = name.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
-  const words = clean.split(/\s+/).filter(Boolean);
-  return new Set(words);
-}
-
-function wordSetsMatch(setA: Set<string>, setB: Set<string>): boolean {
-  if (setA.size === 0 || setB.size === 0) return false;
-  
-  let intersectCount = 0;
-  setA.forEach((word) => {
-    if (setB.has(word)) intersectCount++;
-  });
-  
-  // If one set is a subset of another, it's a match
-  const minSize = Math.min(setA.size, setB.size);
-  if (intersectCount >= minSize) return true;
-  
-  // Or if they share at least 75% of words
-  const maxSize = Math.max(setA.size, setB.size);
-  if (intersectCount / maxSize >= 0.75) return true;
-  
-  return false;
-}
-
+// Exact match. The checklist doc uses the same "<number> - <title>" naming as
+// the video files, so we match on the title alone (case- and whitespace-
+// normalized) — no fuzzy matching. The checklist heading "1 - Beginner 1" and
+// the video file "1 - Beginner 1.mp4" both reduce to the title "Beginner 1".
 function findChecklistForDrill(drillName: string, originalFileName: string, checklistMap: { [key: string]: string[] }): string[] {
-  const normDrill = normalizeName(drillName);
-  const normFile = normalizeName(originalFileName);
-  
-  // 1. Direct normalized matching
+  const keyify = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+  const targets = [keyify(drillName), keyify(parseDrillName(originalFileName).title)];
   for (const key of Object.keys(checklistMap)) {
-    const normKey = normalizeName(key);
-    if (
-      normKey === normDrill ||
-      normKey === normFile ||
-      normFile.includes(normKey) ||
-      normKey.includes(normFile) ||
-      normDrill.includes(normKey) ||
-      normKey.includes(normDrill)
-    ) {
-      return checklistMap[key];
-    }
+    if (targets.includes(keyify(key))) return checklistMap[key];
   }
-  
-  // 2. Fuzzy word-set matching
-  const setDrill = getWordSet(drillName);
-  const setFile = getWordSet(originalFileName);
-  
-  for (const key of Object.keys(checklistMap)) {
-    const setKey = getWordSet(key);
-    if (wordSetsMatch(setKey, setDrill) || wordSetsMatch(setKey, setFile)) {
-      return checklistMap[key];
-    }
-  }
-  
   return [];
 }
 
@@ -355,13 +292,18 @@ export async function getDrillLibrary(includeChecklists: boolean = false): Promi
         }
       }
 
-      const drills: DrillFile[] = videoFiles.map((f) => {
-        const drillName = formatDrillName(f.name);
-        const checklist = findChecklistForDrill(drillName, f.name, checklistMap);
-        
+      // Order videos by their filename number prefix ("0 - ", "1 - ", …).
+      const orderedVideos = [...videoFiles].sort(
+        (a, b) => parseDrillName(a.name).order - parseDrillName(b.name).order
+      );
+
+      const drills: DrillFile[] = orderedVideos.map((f) => {
+        const { title } = parseDrillName(f.name);
+        const checklist = findChecklistForDrill(title, f.name, checklistMap);
+
         return {
           id: f.id,
-          name: drillName,
+          name: title,
           videoUrl: `/api/video/${f.id}`,
           mimeType: f.mimeType,
           thumbnailUrl: f.thumbnailLink,

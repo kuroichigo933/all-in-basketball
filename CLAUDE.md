@@ -96,6 +96,15 @@ All design tokens are in `tailwind.config.ts`. Use the semantic names:
 - **Typography**: `display` class = uppercase + tracking, used for headings. `score` class = tabular nums, used for stats.
 - **Components**: `card`, `btn-game`, `btn-ghost`, `input`, `label`, `baseline` — defined in `globals.css`
 
+### Database migrations
+
+The schema is managed by versioned SQL files in `supabase/migrations/`, applied by `scripts/migrate.mjs`.
+
+- **On deploy:** the build script (`node scripts/migrate.mjs && next build`) runs the migrator first. It only touches the DB on a **production** Vercel build (`VERCEL_ENV === "production"`); preview deploys and local builds skip cleanly.
+- **Tracking:** applied versions are recorded in a `schema_migrations` table; each file runs once, in filename order, inside a transaction.
+- **Adding a migration:** create `supabase/migrations/000N_short_description.sql` with plain forward SQL and push — the next production build applies it. Do NOT edit `0001_baseline.sql` or `supabase/schema.sql` (the latter is historical reference only).
+- **Run manually:** `npm run migrate` (needs `SUPABASE_DB_URL` in `.env.local`).
+
 ### Environment variables
 
 Required:
@@ -103,6 +112,7 @@ Required:
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
+SUPABASE_DB_URL          # direct Postgres connection string — used ONLY by migrations (scripts/migrate.mjs), not the app. Use the direct/session connection, not the transaction pooler.
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
 STRIPE_PRICE_MEMBER
@@ -115,6 +125,14 @@ Optional (Google Drive drill library):
 GOOGLE_SERVICE_ACCOUNT_EMAIL
 GOOGLE_PRIVATE_KEY        # raw PEM, use \n for newlines in .env.local
 GOOGLE_DRIVE_FOLDER_ID
+```
+
+Optional (film-room upload → email, see `lib/email.ts`):
+```
+GMAIL_USER               # Gmail address emails are sent from / SMTP login
+GMAIL_APP_PASSWORD       # 16-char Google App Password (needs 2FA)
+GOOGLE_DRIVE_UPLOAD_FOLDER_ID   # Shared Drive folder films upload into
+REVIEW_NOTIFY_TO         # coach recipient (defaults to sanarshamdeen3@gmail.com)
 ```
 
 Add to `.env.local` for local dev and to Vercel → Settings → Environment Variables for production.

@@ -1,6 +1,11 @@
 -- ============================================================
--- ALL IN BASKETBALL TRAINING — full schema
--- Run this in the Supabase SQL editor on a fresh project.
+-- ALL IN BASKETBALL TRAINING — full schema (historical reference).
+--
+-- This file is NO LONGER the way the schema is applied. Migrations now live in
+-- supabase/migrations/ and run automatically on production deploys via
+-- scripts/migrate.mjs. supabase/migrations/0001_baseline.sql is the idempotent,
+-- executable copy of this schema; make schema changes by adding a new
+-- supabase/migrations/000N_*.sql file, not by editing this file.
 -- ============================================================
 
 create type user_role as enum ('player', 'parent', 'coach');
