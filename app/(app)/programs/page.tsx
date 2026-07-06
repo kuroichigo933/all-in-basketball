@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageTitle } from "@/components/ui";
-import { getDrillLibrary } from "@/lib/google-drive";
+import { getDrillLibraryCached } from "@/lib/google-drive";
 import DrillPicker from "./DrillPicker";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,9 @@ export default async function Programs() {
   ]);
   const enrolled = new Map((enrollments ?? []).map((e) => [e.program_id, e.current_day]));
   const goals = profile?.goals ?? [];
-  const driveCategories = await getDrillLibrary(true); // Fetch checklists only for the Train tab
+  // Checklists are loaded on demand when a session starts (fetchChecklistsForQueueAction),
+  // so we don't pay for parsing every checklist doc up front here.
+  const driveCategories = await getDrillLibraryCached();
 
   return (
     <>

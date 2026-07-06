@@ -17,6 +17,8 @@
 //   GOOGLE_PRIVATE_KEY          (PEM block, newlines as \n)
 //   GOOGLE_DRIVE_FOLDER_ID
 
+import { unstable_cache } from "next/cache";
+
 export type DrillFile = {
   id: string;
   name: string;
@@ -254,71 +256,85 @@ export async function getDrillLibrary(includeChecklists: boolean = false): Promi
   }
 
   const FOLDER = "application/vnd.google-apps.folder";
-  const categories: DrillCategory[] = [];
 
   const categoryFolders = (await listChildren(rootId, token, "root")).filter((f) => f.mimeType === FOLDER);
   console.log(`[Drive] found ${categoryFolders.length} category folder(s)`);
 
-  for (const cat of categoryFolders) {
-    const tierFolders = (await listChildren(cat.id, token, cat.name)).filter((f) => f.mimeType === FOLDER);
-    console.log(`[Drive] category "${cat.name}" — ${tierFolders.length} tier folder(s)`);
+  // Fetch all categories (and their tiers) in parallel rather than sequentially,
+  // so the whole tree comes back in ~2 round-trips of depth instead of N.
+  const categoryResults = await Promise.all(
+    categoryFolders.map(async (cat): Promise<DrillCategory | null> => {
+      const tierFolders = (await listChildren(cat.id, token, cat.name)).filter((f) => f.mimeType === FOLDER);
 
-    const tiers: DrillTier[] = [];
-    for (const tier of tierFolders) {
-      const files = (await listChildren(tier.id, token, `${cat.name}/${tier.name}`)).filter((f) => f.mimeType !== FOLDER);
-      console.log(`[Drive] "${cat.name}/${tier.name}" — ${files.length} file(s)`);
-      
-      // Support BOTH Google Docs (document) and Google Sheets (spreadsheet)
-      const docFiles = files.filter(
-        (f) =>
-          f.mimeType === "application/vnd.google-apps.document" ||
-          f.mimeType === "application/vnd.google-apps.spreadsheet"
-      );
-      // Files named "XXXX..." are hidden from the library and train/session builder.
-      const videoFiles = files.filter(
-        (f) => f.mimeType && f.mimeType.startsWith("video/") && !/^xxxx/i.test(f.name)
-      );
-      
-      const checklistMap: { [key: string]: string[] } = {};
-      if (includeChecklists && docFiles.length > 0) {
-        for (const doc of docFiles) {
-          try {
-            const docText = await exportDriveFileAsText(doc.id, doc.mimeType, token);
-            const parsed = parseGoogleDocChecklist(docText);
-            Object.assign(checklistMap, parsed);
-          } catch (err) {
-            console.error(`[Drive] ❌ Failed to fetch/parse doc/sheet checklist for ${doc.name} (${doc.id}):`, err);
+      const tierResults = await Promise.all(
+        tierFolders.map(async (tier): Promise<DrillTier | null> => {
+          const files = (await listChildren(tier.id, token, `${cat.name}/${tier.name}`)).filter((f) => f.mimeType !== FOLDER);
+
+          const docFiles = files.filter(
+            (f) =>
+              f.mimeType === "application/vnd.google-apps.document" ||
+              f.mimeType === "application/vnd.google-apps.spreadsheet"
+          );
+          // Files named "XXXX..." are hidden from the library and train/session builder.
+          const videoFiles = files.filter(
+            (f) => f.mimeType && f.mimeType.startsWith("video/") && !/^xxxx/i.test(f.name)
+          );
+
+          const checklistMap: { [key: string]: string[] } = {};
+          if (includeChecklists && docFiles.length > 0) {
+            const parsedDocs = await Promise.all(
+              docFiles.map(async (doc) => {
+                try {
+                  return parseGoogleDocChecklist(await exportDriveFileAsText(doc.id, doc.mimeType, token));
+                } catch (err) {
+                  console.error(`[Drive] ❌ Failed to fetch/parse checklist for ${doc.name} (${doc.id}):`, err);
+                  return {};
+                }
+              })
+            );
+            for (const parsed of parsedDocs) Object.assign(checklistMap, parsed);
           }
-        }
-      }
 
-      // Order videos by their filename number prefix ("0 - ", "1 - ", …).
-      const orderedVideos = [...videoFiles].sort(
-        (a, b) => parseDrillName(a.name).order - parseDrillName(b.name).order
+          // Order videos by their filename number prefix ("0 - ", "1 - ", …).
+          const orderedVideos = [...videoFiles].sort(
+            (a, b) => parseDrillName(a.name).order - parseDrillName(b.name).order
+          );
+
+          const drills: DrillFile[] = orderedVideos.map((f) => {
+            const { title } = parseDrillName(f.name);
+            const checklist = findChecklistForDrill(title, f.name, checklistMap);
+            return {
+              id: f.id,
+              name: title,
+              videoUrl: `/api/video/${f.id}`,
+              mimeType: f.mimeType,
+              thumbnailUrl: f.thumbnailLink,
+              ...(checklist && checklist.length > 0 ? { checklist } : {}),
+            };
+          });
+
+          return drills.length > 0 ? { tier: tier.name, drills } : null;
+        })
       );
 
-      const drills: DrillFile[] = orderedVideos.map((f) => {
-        const { title } = parseDrillName(f.name);
-        const checklist = findChecklistForDrill(title, f.name, checklistMap);
+      const tiers = tierResults.filter((t): t is DrillTier => t !== null);
+      return tiers.length > 0 ? { category: cat.name, tiers } : null;
+    })
+  );
 
-        return {
-          id: f.id,
-          name: title,
-          videoUrl: `/api/video/${f.id}`,
-          mimeType: f.mimeType,
-          thumbnailUrl: f.thumbnailLink,
-          ...(checklist && checklist.length > 0 ? { checklist } : {}),
-        };
-      });
-
-      if (drills.length > 0) tiers.push({ tier: tier.name, drills });
-    }
-    if (tiers.length > 0) categories.push({ category: cat.name, tiers });
-  }
-
-  console.log(`[Drive] final result — ${categories.length} categorie(s):`, categories.map((c) => `${c.category}(${c.tiers.map((t) => `${t.tier}:${t.drills.length}`).join(",")})`).join(" | "));
+  const categories = categoryResults.filter((c): c is DrillCategory => c !== null);
+  console.log(`[Drive] final result — ${categories.length} categorie(s)`);
   return categories;
 }
+
+// Cached wrapper — the drill library changes rarely, so persist the whole tree
+// in Next's Data Cache for 10 minutes (shared across requests, even on dynamic
+// pages). The `includeChecklists` arg is part of the cache key.
+export const getDrillLibraryCached = unstable_cache(
+  (includeChecklists: boolean = false) => getDrillLibrary(includeChecklists),
+  ["drill-library"],
+  { revalidate: 600, tags: ["drill-library"] }
+);
 
 // Stream a Drive file through the server (keeps videos private, no Drive UI).
 // Forwards Range header so seeking works correctly.

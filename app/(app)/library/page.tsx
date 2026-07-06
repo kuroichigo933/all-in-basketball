@@ -1,32 +1,19 @@
 import { PageTitle } from "@/components/ui";
-import { getDrillLibrary } from "@/lib/google-drive";
-import DrillVideoCard from "@/components/DrillVideoCard";
+import { getDrillLibraryCached } from "@/lib/google-drive";
+import DrillLibrary from "@/components/DrillLibrary";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
-
-const TIER_ORDER = ["Beginner", "Intermediate", "Expert"];
-
-function sortTiers<T extends { tier: string }>(tiers: T[]): T[] {
-  return [...tiers].sort((a, b) => {
-    const ai = TIER_ORDER.indexOf(a.tier);
-    const bi = TIER_ORDER.indexOf(b.tier);
-    if (ai === -1 && bi === -1) return a.tier.localeCompare(b.tier);
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
-}
 
 export default async function Library() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const [{ data: completions }, categories] = await Promise.all([
     supabase.from("completed_drills").select("drill_id").eq("user_id", user?.id || ""),
-    getDrillLibrary(),
+    getDrillLibraryCached(),
   ]);
 
-  const completedIds = new Set((completions ?? []).map((c) => c.drill_id));
+  const completedIds = (completions ?? []).map((c) => c.drill_id);
 
   if (categories.length === 0) {
     return (
@@ -43,31 +30,7 @@ export default async function Library() {
   return (
     <>
       <PageTitle kicker="Drill library" title="Put in the work" />
-      <div className="space-y-12">
-        {categories.map((cat) => (
-          <section key={cat.category}>
-            <h2 className="display baseline pb-3 text-2xl sm:text-3xl">{cat.category}</h2>
-            <div className="mt-5 space-y-8">
-              {sortTiers(cat.tiers).map(({ tier, drills }) => (
-                <div key={tier}>
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-wood">{tier}</p>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {drills.map((drill) => (
-                      <DrillVideoCard
-                        key={drill.id}
-                        drill={drill}
-                        category={cat.category}
-                        tier={tier}
-                        completed={completedIds.has(drill.id)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
+      <DrillLibrary categories={categories} completedIds={completedIds} />
     </>
   );
 }
