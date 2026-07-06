@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -17,12 +18,21 @@ const LINKS = [
 export default function AppNav({ role, name }: { role: string; name: string }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [moreOpen, setMoreOpen] = useState(false);
+
   const links = [...LINKS];
   if (role === "parent") links.push({ href: "/family", label: "My Players" });
   if (role === "coach") {
     links.push({ href: "/coach", label: "Coach Desk" });
     links.push({ href: "/ai-tracker", label: "AI Tracker" });
   }
+
+  // Mobile bottom bar: 4 primary tabs + a "More" sheet for the rest.
+  const primary = links.slice(0, 4);
+  const rest = links.slice(4);
+
+  // Close the More sheet whenever the route changes.
+  useEffect(() => { setMoreOpen(false); }, [pathname]);
 
   async function signOut() {
     await createClient().auth.signOut();
@@ -50,14 +60,38 @@ export default function AppNav({ role, name }: { role: string; name: string }) {
           </div>
         </div>
       </header>
-      {/* bottom tab bar (mobile / at the court) */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-line bg-asphalt/95 backdrop-blur md:hidden" style={{ scrollbarWidth: "none" }}>
-        {links.map((l) => (
-          <Link key={l.href} href={l.href}
-            className={`flex-1 whitespace-nowrap px-3 py-3 text-center text-[11px] font-semibold ${pathname.startsWith(l.href) ? "text-game" : "text-muted"}`}>
+
+      {/* "More" sheet (mobile) — sits above the tab bar */}
+      {moreOpen && rest.length > 0 && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={() => setMoreOpen(false)} />
+          <div className="fixed inset-x-0 bottom-[49px] z-40 border-t border-line bg-asphalt md:hidden">
+            {rest.map((l) => (
+              <Link key={l.href} href={l.href} onClick={() => setMoreOpen(false)}
+                className={`block border-b border-line/60 px-5 py-3.5 text-sm font-semibold ${pathname.startsWith(l.href) ? "text-game" : "text-chalk"}`}>
+                {l.label}
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* bottom tab bar (mobile) */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-asphalt/95 backdrop-blur md:hidden">
+        {primary.map((l) => (
+          <Link key={l.href} href={l.href} onClick={() => setMoreOpen(false)}
+            className={`flex-1 whitespace-nowrap px-2 py-3 text-center text-[11px] font-semibold ${pathname.startsWith(l.href) ? "text-game" : "text-muted"}`}>
             {l.label}
           </Link>
         ))}
+        {rest.length > 0 && (
+          <button type="button" onClick={() => setMoreOpen((o) => !o)}
+            className={`flex-1 whitespace-nowrap px-2 py-3 text-center text-[11px] font-semibold ${
+              moreOpen || rest.some((l) => pathname.startsWith(l.href)) ? "text-game" : "text-muted"
+            }`}>
+            More ⋯
+          </button>
+        )}
       </nav>
     </>
   );

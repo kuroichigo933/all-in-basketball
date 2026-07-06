@@ -16,8 +16,8 @@ export default function HowItWorks() {
       <section className="mx-auto max-w-4xl px-4 py-10 sm:py-16">
         <p className="text-xs uppercase tracking-[0.25em] text-game">How it works</p>
         <h1 className="display mt-2 text-4xl md:text-5xl">See it in action</h1>
-        <div className="mt-8 overflow-hidden rounded-card border border-line bg-raised shadow-2xl">
-          <video src="/demo.mp4" controls playsInline preload="metadata" className="w-full" />
+        <div className="mt-8 flex justify-center overflow-hidden rounded-card border border-line bg-black shadow-2xl">
+          <video src="/demo.mp4" controls playsInline preload="metadata" className="max-h-[75vh] w-auto" />
         </div>
         <div className="mt-8">
           <Link href="/signup" className="btn-game">Get started</Link>

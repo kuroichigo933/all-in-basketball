@@ -6,7 +6,13 @@ import { fetchChecklistsForQueueAction } from "@/app/(app)/actions";
 
 type QueueItem = DrillFile & { category: string; tier: string };
 
-const TIER_ORDER = ["Beginner", "Intermediate", "Expert"];
+// Order tiers Beginner → Intermediate → Advanced/Expert, tolerant of casing and
+// stray whitespace in the Drive folder names (e.g. "Beginner ").
+const TIER_ORDER = ["beginner", "intermediate", "advanced", "expert"];
+function tierRank(tier: string): number {
+  const i = TIER_ORDER.indexOf(tier.trim().toLowerCase());
+  return i === -1 ? TIER_ORDER.length : i;
+}
 
 // Shown between videos in "Break to Practice" mode when a drill has no
 // specific checklist matched from Drive.
@@ -207,15 +213,13 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
               </button>
               {isOpen && (
                 <div className="border-t border-line px-4 pb-4 pt-3 space-y-4">
-                  {TIER_ORDER
-                    .filter((t) => cat.tiers.some((ti) => ti.tier === t))
-                    .concat(cat.tiers.filter((t) => !TIER_ORDER.includes(t.tier)).map((t) => t.tier))
-                    .map((tierName) => {
-                      const tierData = cat.tiers.find((t) => t.tier === tierName);
-                      if (!tierData) return null;
+                  {[...cat.tiers]
+                    .sort((a, b) => tierRank(a.tier) - tierRank(b.tier) || a.tier.localeCompare(b.tier))
+                    .map((tierData) => {
+                      const tierName = tierData.tier;
                       return (
                         <div key={tierName}>
-                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-wood">{tierName}</p>
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-wood">{tierName.trim()}</p>
                           <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                             {tierData.drills.map((drill) => {
                               const inQueue = queue.some((q) => q.id === drill.id);

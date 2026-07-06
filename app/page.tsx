@@ -33,7 +33,6 @@ export default function Landing() {
         <div className="mt-10 lg:mt-0 relative aspect-[4/3] w-full overflow-hidden rounded-card border border-line shadow-2xl bg-raised">
           <video
             src="/intro.mp4"
-            poster="/intro-poster.jpg"
             controls
             loop
             muted

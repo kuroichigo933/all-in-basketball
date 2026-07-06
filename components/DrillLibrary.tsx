@@ -4,17 +4,16 @@ import { useState } from "react";
 import type { DrillCategory } from "@/lib/google-drive";
 import DrillVideoCard from "@/components/DrillVideoCard";
 
-const TIER_ORDER = ["Beginner", "Intermediate", "Expert"];
+// Order tiers Beginner → Intermediate → Advanced/Expert, tolerant of casing and
+// stray whitespace in the Drive folder names (e.g. "Beginner ").
+const TIER_ORDER = ["beginner", "intermediate", "advanced", "expert"];
+function tierRank(tier: string): number {
+  const i = TIER_ORDER.indexOf(tier.trim().toLowerCase());
+  return i === -1 ? TIER_ORDER.length : i;
+}
 
 function sortTiers<T extends { tier: string }>(tiers: T[]): T[] {
-  return [...tiers].sort((a, b) => {
-    const ai = TIER_ORDER.indexOf(a.tier);
-    const bi = TIER_ORDER.indexOf(b.tier);
-    if (ai === -1 && bi === -1) return a.tier.localeCompare(b.tier);
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
+  return [...tiers].sort((a, b) => tierRank(a.tier) - tierRank(b.tier) || a.tier.localeCompare(b.tier));
 }
 
 // Collapsible category sections. Drill cards (and their thumbnails) only mount
