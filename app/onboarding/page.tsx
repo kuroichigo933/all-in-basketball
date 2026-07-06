@@ -67,7 +67,7 @@ export default async function Onboarding() {
             {GOALS.map(([v, l]) => <Choice key={v} name="goals" value={v} label={l} type="checkbox" />)}
           </div>
         </fieldset>
-        <button className="btn-game w-full">Build my plan</button>
+        <button className="btn-game w-full">Let's get to work</button>
       </form>
     </main>
   );

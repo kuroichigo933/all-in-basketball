@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 const PLANS = [
   {
     name: "Basic", price: "$9.99", period: "/mo", cta: "Go Basic", plan: "basic",
-    points: ["Full drill library", "All follow-along programs", "1 coach film review / month"],
+    points: ["Full drill library", "All follow-along programs"],
   },
   {
     name: "Professional", price: "$24.99", period: "/mo", cta: "Go Professional", plan: "professional", featured: true,

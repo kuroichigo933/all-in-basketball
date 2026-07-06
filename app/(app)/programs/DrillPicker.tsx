@@ -190,7 +190,7 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
+    <div className={`grid gap-4 lg:grid-cols-[1fr_300px] ${queue.length >= 2 ? "pb-28 lg:pb-0" : ""}`}>
       {/* Drill selector */}
       <div className="space-y-2">
         {categories.map((cat) => {
@@ -270,7 +270,7 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
         )}
         <button
           type="button"
-          className="btn-game mt-4 w-full"
+          className="btn-game mt-4 hidden w-full lg:block"
           disabled={queue.length === 0}
           onClick={() => setShowModeSelect(true)}
         >
@@ -283,6 +283,17 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
           </button>
         )}
       </div>
+
+      {/* Sticky "Start session" CTA — follows you on mobile/tablet so the next
+          step is obvious. Appears once at least 2 drills are queued; sits just
+          above the mobile tab bar. Desktop uses the sticky sidebar button. */}
+      {queue.length >= 2 && (
+        <div className="fixed inset-x-0 bottom-12 z-40 border-t border-line bg-asphalt/95 p-3 backdrop-blur md:bottom-0 lg:hidden">
+          <button type="button" className="btn-game w-full" onClick={() => setShowModeSelect(true)}>
+            Start session ({queue.length} drill{queue.length !== 1 ? "s" : ""})
+          </button>
+        </div>
+      )}
 
       {showModeSelect && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
