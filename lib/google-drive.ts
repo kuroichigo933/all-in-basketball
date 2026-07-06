@@ -191,21 +191,23 @@ export function parseGoogleDocChecklist(text: string): { [videoName: string]: st
     // files, e.g. "1 - Beginner 1". Everything until the next heading is its
     // checklist items. (The spaced dash avoids matching item lines like
     // "20x each hand …" or "1-2 dribbles".)
-    const videoMatch = line.match(/^\d+\s+-\s+(.+)$/);
+    // Google Docs exports numbered/bulleted lists with their OWN marker, so a
+    // heading exports as "1. 1 - Beginner 1" (Docs' "1." + our "1 - …") and an
+    // item as "1. 20x each hand". Strip that leading list marker first.
+    const core = line.replace(/^(?:\d+[.)]|[a-zA-Z][.)]|[-*])\s+/, "").trim();
+
+    // Heading: "<number> - <title>", e.g. "1 - Beginner 1". The spaced dash
+    // avoids matching item lines like "20x each hand …".
+    const videoMatch = core.match(/^\d+\s*-\s+(.+)$/);
     if (videoMatch) {
-      let videoName = videoMatch[1].trim();
-      // Remove trailing comma if any
-      if (videoName.endsWith(",")) {
-        videoName = videoName.slice(0, -1).trim();
-      }
-      currentVideoName = videoName;
+      currentVideoName = videoMatch[1].replace(/,+$/, "").trim();
       result[currentVideoName] = [];
       continue;
     }
     
     // If we are currently under a video, any non-video line is a checklist item!
     if (currentVideoName) {
-      let cleanItem = line;
+      let cleanItem = core;
       // Strip any list prefix (like "a.", "b)", "-", "*", bullets, etc.)
       const prefixMatch = cleanItem.match(/^(?:[a-zA-Z\d]+[\.\)]|[\-\*•◦▪▫–—\u2013\u2014\u25e6\u25aa\u25ab])\s*(.*)$/);
       if (prefixMatch) {
@@ -230,7 +232,7 @@ export function parseGoogleDocChecklist(text: string): { [videoName: string]: st
 // normalized) — no fuzzy matching. The checklist heading "1 - Beginner 1" and
 // the video file "1 - Beginner 1.mp4" both reduce to the title "Beginner 1".
 function findChecklistForDrill(drillName: string, originalFileName: string, checklistMap: { [key: string]: string[] }): string[] {
-  const keyify = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+  const keyify = (s: string) => s.trim().replace(/[-_]+/g, " ").replace(/\s+/g, " ").toLowerCase();
   const targets = [keyify(drillName), keyify(parseDrillName(originalFileName).title)];
   for (const key of Object.keys(checklistMap)) {
     if (targets.includes(keyify(key))) return checklistMap[key];
