@@ -131,8 +131,15 @@ Optional (film-room upload → email, see `lib/email.ts`):
 ```
 GMAIL_USER               # Gmail address emails are sent from / SMTP login
 GMAIL_APP_PASSWORD       # 16-char Google App Password (needs 2FA)
-GOOGLE_DRIVE_UPLOAD_FOLDER_ID   # Shared Drive folder films upload into
 REVIEW_NOTIFY_TO         # coach recipient (defaults to sanarshamdeen3@gmail.com)
+CRON_SECRET              # protects the daily /api/cron/cleanup-reviews TTL job (Vercel sends it as Bearer)
 ```
+
+Film-review flow: the browser uploads the clip straight to the private Supabase
+`review-videos` bucket, `finalizeFilmReview` emails the coach a 14-day signed
+URL, and a daily Vercel cron (`vercel.json` → `/api/cron/cleanup-reviews`)
+deletes clips older than 14 days. (Google Drive is used only for the read-only
+drill library, not uploads — service accounts can't write to Drive without a
+Shared Drive.)
 
 Add to `.env.local` for local dev and to Vercel → Settings → Environment Variables for production.

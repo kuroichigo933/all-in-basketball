@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getVideoStream } from "@/lib/google-drive";
 
+// Serves drill-library videos from Google Drive. Review footage no longer flows
+// through here — it lives in Supabase storage and is served via signed URLs.
 export async function GET(
   request: Request,
   { params }: { params: { fileId: string } }
@@ -11,17 +12,6 @@ export async function GET(
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  // Film-review footage is coach-only — never viewable by players (not even the
-  // uploader). Drill-library videos aren't in review_submissions and stream to
-  // any logged-in user as before. Admin client is used so the check sees every
-  // review row regardless of RLS ownership.
-  const { data: reviewRow } = await createAdminClient()
-    .from("review_submissions").select("id").eq("video_path", params.fileId).maybeSingle();
-  if (reviewRow) {
-    const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-    if (me?.role !== "coach") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
 
   const range = request.headers.get("range") ?? undefined;
 

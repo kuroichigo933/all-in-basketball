@@ -4,13 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  getChecklistsForSpecificDrills,
-  createResumableUploadSession,
-} from "@/lib/google-drive";
+import { getChecklistsForSpecificDrills } from "@/lib/google-drive";
 import { sendReviewEmail, sendBookingEmail } from "@/lib/email";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 async function requireUser() {
   const supabase = createClient();
@@ -102,30 +97,14 @@ async function checkStreakBadges(userId: string) {
 }
 
 // ---------- Film Room ----------
-// Step 1: verify the user has a credit, then open a Drive resumable upload
-// session. The browser uploads the bytes directly to the returned URI.
-export async function startFilmUpload(fileName: string, mimeType: string) {
-  const { user } = await requireUser();
-  const admin = createAdminClient();
-  const { data: credits } = await admin
-    .from("review_credits").select("balance").eq("user_id", user.id).maybeSingle();
-  if (!credits || credits.balance < 1) {
-    return { error: "You need a review credit. Get one on the pricing page." };
-  }
-  try {
-    const sessionUri = await createResumableUploadSession(fileName, mimeType);
-    return { sessionUri };
-  } catch (err: any) {
-    console.error("[Film] startFilmUpload failed:", err);
-    return { error: "Couldn't start the upload. Try again in a moment." };
-  }
-}
+const REVIEW_BUCKET = "review-videos";
+const SIGNED_URL_TTL = 60 * 60 * 24 * 14; // 14 days
 
-// Step 2: after the browser finishes uploading, share the file with the coach,
-// email the details, then spend a credit and record the submission.
-// A credit is only spent once the email has actually been sent.
+// The browser uploads the clip straight to Supabase storage, then calls this to
+// record the submission, email the coach a 14-day signed link, and spend a
+// credit. A credit is only spent once the email has actually been sent.
 export async function finalizeFilmReview(
-  fileId: string,
+  videoPath: string,
   focus: string,
   otherText: string,
   notes: string
@@ -144,13 +123,21 @@ export async function finalizeFilmReview(
 
   const focusLabel = focus === "other" ? `Other: ${otherText.trim() || "—"}` : focus;
 
-  // Record the submission first so the coach email can link to the (coach-gated)
-  // review page where the footage streams privately through the app proxy.
+  // Signed URL the coach can click straight from the email (expires in 14 days).
+  const { data: signed, error: signErr } = await admin.storage
+    .from(REVIEW_BUCKET).createSignedUrl(videoPath, SIGNED_URL_TTL);
+  if (signErr || !signed?.signedUrl) {
+    console.error("[Film] finalizeFilmReview sign failed:", signErr);
+    await admin.storage.from(REVIEW_BUCKET).remove([videoPath]);
+    return { error: "Couldn't prepare your clip. Please try again." };
+  }
+
   const { data: inserted, error: insErr } = await supabase.from("review_submissions")
-    .insert({ user_id: user.id, video_path: fileId, focus: focusLabel, notes })
+    .insert({ user_id: user.id, video_path: videoPath, focus: focusLabel, notes })
     .select("id").single();
   if (insErr || !inserted) {
     console.error("[Film] finalizeFilmReview insert failed:", insErr);
+    await admin.storage.from(REVIEW_BUCKET).remove([videoPath]);
     return { error: "Couldn't save your submission. Please try again." };
   }
 
@@ -162,12 +149,13 @@ export async function finalizeFilmReview(
       skillLevel: profile?.skill_level,
       focus: focusLabel,
       notes,
-      videoLink: `${SITE_URL}/coach/reviews/${inserted.id}`,
+      videoLink: signed.signedUrl,
     });
   } catch (err: any) {
     console.error("[Film] finalizeFilmReview email failed:", err);
-    // Roll back so no credit is charged and no orphan submission remains.
+    // Roll back so no credit is charged and nothing is left behind.
     await admin.from("review_submissions").delete().eq("id", inserted.id);
+    await admin.storage.from(REVIEW_BUCKET).remove([videoPath]);
     return { error: "Your clip uploaded, but the email failed to send. No credit was used — please try again." };
   }
 

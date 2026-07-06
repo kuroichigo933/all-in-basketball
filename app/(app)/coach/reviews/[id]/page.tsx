@@ -15,6 +15,11 @@ export default async function ReviewDetail({ params }: { params: { id: string } 
     .eq("id", params.id).single();
   if (!sub) notFound();
 
+  // Footage lives in the private review-videos bucket; coaches have read RLS,
+  // so sign a short-lived URL for inline playback.
+  const { data: signed } = await supabase.storage
+    .from("review-videos").createSignedUrl(sub.video_path, 3600);
+
   async function send(formData: FormData) {
     "use server";
     await postFeedback(params.id, String(formData.get("body") ?? ""));
@@ -31,10 +36,10 @@ export default async function ReviewDetail({ params }: { params: { id: string } 
       <PageTitle kicker="Film review" title={`${p?.full_name} · ${sub.focus}`} />
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
-          {sub.video_path ? (
-            <video src={`/api/video/${sub.video_path}`} controls playsInline controlsList="nodownload" className="w-full rounded-card bg-raised" />
+          {signed?.signedUrl ? (
+            <video src={signed.signedUrl} controls playsInline controlsList="nodownload" className="w-full rounded-card bg-raised" />
           ) : (
-            <p className="text-sm text-game">Couldn&apos;t load the clip.</p>
+            <p className="text-sm text-game">Couldn&apos;t load the clip (it may have expired).</p>
           )}
           <div className="card mt-4 p-4 text-sm">
             <p><span className="text-muted">Player:</span> {p?.full_name} · {p?.age_group} · {p?.skill_level}</p>
