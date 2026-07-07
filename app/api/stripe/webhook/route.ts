@@ -132,13 +132,27 @@ export async function POST(request: Request) {
       if (session.mode === "payment" && session.metadata?.plan === "review_credit" && userId) {
         await addCredits(userId, 1);
       }
-      // Save customer mapping immediately upon subscription checkout completion
+      // Save customer mapping and upgrade profile immediately upon subscription checkout completion
       if (session.mode === "subscription" && userId && session.customer) {
         const admin = createAdminClient();
+        const plan = (session.metadata?.plan as Tier) || "basic";
+        const subId = typeof session.subscription === "string" 
+          ? session.subscription 
+          : (session.subscription?.id || "");
+          
         await admin.from("subscriptions").upsert({
           user_id: userId,
           stripe_customer_id: session.customer as string,
+          stripe_subscription_id: subId,
+          plan,
+          status: "active",
         });
+        
+        await admin.from("profiles").update({ tier: plan }).eq("id", userId);
+        
+        if (plan === "professional") {
+          await ensureProfessionalCredits(userId);
+        }
       }
       break;
     }
