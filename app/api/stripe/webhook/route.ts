@@ -68,6 +68,17 @@ async function setCredits(userId: string, amount: number) {
   }
 }
 
+async function ensureProfessionalCredits(userId: string) {
+  const admin = createAdminClient();
+  const { data: row } = await admin.from("review_credits")
+    .select("balance").eq("user_id", userId).maybeSingle();
+  if (!row) {
+    await admin.from("review_credits").insert({ user_id: userId, balance: PROFESSIONAL_MONTHLY_CREDITS });
+  } else if (row.balance === 0) {
+    await admin.from("review_credits").update({ balance: PROFESSIONAL_MONTHLY_CREDITS }).eq("user_id", userId);
+  }
+}
+
 async function syncSubscription(sub: Stripe.Subscription) {
   const admin = createAdminClient();
   const userId = await userIdFromCustomer(sub.customer as string);
@@ -92,6 +103,12 @@ async function syncSubscription(sub: Stripe.Subscription) {
     current_period_end: currentPeriodEnd,
   });
   await admin.from("profiles").update({ tier: plan }).eq("id", userId);
+
+  // Safety net: if their subscription is active/trialing and they have the professional tier,
+  // ensure they have credits initialized (resolves any webhook order race conditions).
+  if (plan === "professional" && (sub.status === "active" || sub.status === "trialing")) {
+    await ensureProfessionalCredits(userId);
+  }
 }
 
 export async function POST(request: Request) {
@@ -115,7 +132,14 @@ export async function POST(request: Request) {
       if (session.mode === "payment" && session.metadata?.plan === "review_credit" && userId) {
         await addCredits(userId, 1);
       }
-      // subscriptions are handled by customer.subscription.* below
+      // Save customer mapping immediately upon subscription checkout completion
+      if (session.mode === "subscription" && userId && session.customer) {
+        const admin = createAdminClient();
+        await admin.from("subscriptions").upsert({
+          user_id: userId,
+          stripe_customer_id: session.customer as string,
+        });
+      }
       break;
     }
     case "customer.subscription.created":
@@ -129,9 +153,26 @@ export async function POST(request: Request) {
       const invoice = event.data.object as Stripe.Invoice;
       const userId = invoice.customer ? await userIdFromCustomer(invoice.customer as string) : null;
       const subId = invoice.subscription as string | null;
-      if (userId && subId) {
-        const sub = await stripe.subscriptions.retrieve(subId);
-        const plan = getPlanFromSubObject(sub);
+      if (userId) {
+        let plan: Tier = "basic";
+        const priceId = invoice.lines?.data?.[0]?.price?.id;
+        const detectedPlan = planFromPrice(priceId);
+        
+        if (detectedPlan !== "free") {
+          plan = detectedPlan;
+        } else if (subId) {
+          try {
+            const sub = await stripe.subscriptions.retrieve(subId);
+            plan = getPlanFromSubObject(sub);
+          } catch (subErr) {
+            console.error("[stripe webhook] failed to retrieve subscription as fallback:", subErr);
+            // Fallback to metadata on the invoice if retrieve fails
+            const meta = invoice.metadata?.plan || invoice.lines?.data?.[0]?.metadata?.plan;
+            if (meta === "professional" || meta === "basic") {
+              plan = meta;
+            }
+          }
+        }
         await setCredits(userId, plan === "professional" ? PROFESSIONAL_MONTHLY_CREDITS : BASIC_MONTHLY_CREDITS);
       }
       break;

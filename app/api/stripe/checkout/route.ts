@@ -40,20 +40,11 @@ export async function POST(request: Request) {
   const { data: sub } = await admin.from("subscriptions")
     .select("stripe_customer_id").eq("user_id", user.id).maybeSingle();
 
-  let customerId = sub?.stripe_customer_id ?? undefined;
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: user.email ?? undefined,
-      metadata: { supabase_user_id: user.id },
-    });
-    customerId = customer.id;
-    await admin.from("subscriptions").upsert({
-      user_id: user.id, stripe_customer_id: customerId,
-    });
-  }
+  const customerId = sub?.stripe_customer_id ?? undefined;
 
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
+    customer_email: customerId ? undefined : (user.email ?? undefined),
     mode: "subscription",
     line_items: [{ price, quantity: 1 }],
     allow_promotion_codes: true,
