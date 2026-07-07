@@ -10,8 +10,8 @@ const PROFESSIONAL_MONTHLY_CREDITS = 4;
 const BASIC_MONTHLY_CREDITS = 0;
 
 function planFromPrice(priceId: string | undefined): Tier {
-  if (priceId === process.env.STRIPE_PRICE_PROFESSIONAL) return "professional";
-  if (priceId === process.env.STRIPE_PRICE_BASIC) return "basic";
+  if (priceId === process.env.STRIPE_PRICE_PROFESSIONAL || priceId === process.env.STRIPE_PRICE_PROFESSIONAL_YEARLY) return "professional";
+  if (priceId === process.env.STRIPE_PRICE_BASIC || priceId === process.env.STRIPE_PRICE_BASIC_YEARLY) return "basic";
   return "free";
 }
 
@@ -30,6 +30,8 @@ function planFromSub(sub: Stripe.Subscription): Tier {
 function getPlanFromSubObject(sub: Stripe.Subscription): Tier {
   const meta = sub.metadata?.plan;
   if (meta === "professional" || meta === "basic") return meta;
+  if (meta === "professional_yearly") return "professional";
+  if (meta === "basic_yearly") return "basic";
   const byPrice = planFromPrice(sub.items.data[0]?.price.id);
   return byPrice !== "free" ? byPrice : "basic";
 }
@@ -135,7 +137,8 @@ export async function POST(request: Request) {
       // Save customer mapping and upgrade profile immediately upon subscription checkout completion
       if (session.mode === "subscription" && userId && session.customer) {
         const admin = createAdminClient();
-        const plan = (session.metadata?.plan as Tier) || "basic";
+        const rawPlan = (session.metadata?.plan as string) || "basic";
+        const plan: Tier = (rawPlan === "professional_yearly" || rawPlan === "professional") ? "professional" : "basic";
         const subId = typeof session.subscription === "string" 
           ? session.subscription 
           : (session.subscription?.id || "");

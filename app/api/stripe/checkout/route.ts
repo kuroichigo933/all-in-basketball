@@ -27,6 +27,8 @@ export async function POST(request: Request) {
   const priceMap: Record<string, string | undefined> = {
     basic: process.env.STRIPE_PRICE_BASIC,
     professional: process.env.STRIPE_PRICE_PROFESSIONAL,
+    basic_yearly: process.env.STRIPE_PRICE_BASIC_YEARLY,
+    professional_yearly: process.env.STRIPE_PRICE_PROFESSIONAL_YEARLY,
   };
   
   const price = priceMap[plan];
