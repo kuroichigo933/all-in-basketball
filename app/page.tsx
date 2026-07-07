@@ -21,8 +21,9 @@ export default function Landing() {
             If it was easy, everyone would do it.
           </h1>
           <p className="mt-6 text-lg text-muted">
-            Train the way our in-gym athletes train. Follow-along court workouts, a full drill
-            library, shot tracking — and send us film of your shot for a real coach breakdown.
+          Train the way our in-gym athletes train. Follow-along court workouts, a full drill 
+          library, shot tracking—and send us your film for personalized coach breakdowns of your 
+          moves, shot, and overall game.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/signup" className="btn-game">Create an account</Link>
