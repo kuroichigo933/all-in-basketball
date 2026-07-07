@@ -11,7 +11,7 @@ export default function DemoVideo() {
     <div className="relative inline-block">
       <video
         ref={ref}
-        src="/demo.mp4"
+        src="/demo.mp4#t=0.001"
         controls
         playsInline
         preload="metadata"

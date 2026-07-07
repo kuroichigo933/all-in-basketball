@@ -151,3 +151,60 @@ export async function sendBookingEmail(input: BookingEmailInput): Promise<void> 
     html,
   });
 }
+
+export type FeedbackEmailInput = {
+  name: string;
+  email: string;
+  type: string;
+  message: string;
+};
+
+export async function sendFeedbackEmail(input: FeedbackEmailInput): Promise<void> {
+  const { name, email, type, message } = input;
+  const from = process.env.GMAIL_USER!;
+  const sanarEmail = process.env.REVIEW_NOTIFY_TO || COACH_FALLBACK;
+  const recipients = Array.from(new Set(["sunnyc93@gmail.com", sanarEmail]));
+
+  const who = name?.trim() || "Someone";
+  const rows: [string, string][] = [
+    ["Name", who],
+    ["Email", email],
+    ["Type", type],
+    ["Message", message?.trim() || "—"],
+  ];
+
+  const rowsHtml = rows
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:4px 12px 4px 0;color:#888;vertical-align:top;white-space:nowrap">${esc(
+          k
+        )}</td><td style="padding:4px 0;color:#111">${esc(v)}</td></tr>`
+    )
+    .join("");
+
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto">
+    <h2 style="margin:0 0 4px">New feedback from ${esc(who)}</h2>
+    <p style="color:#666;margin:0 0 16px">A user has submitted feedback via the app.</p>
+    <table style="border-collapse:collapse;font-size:14px;margin-bottom:20px">${rowsHtml}</table>
+    <p style="color:#999;font-size:12px;margin-top:8px">
+      Reply to this email to reach the user directly.
+    </p>
+  </div>`;
+
+  const text = [
+    `New feedback from ${who}`,
+    ``,
+    ...rows.map(([k, v]) => `${k}: ${v}`),
+  ].join("\n");
+
+  await getTransport().sendMail({
+    from: `All-In Basketball <${from}>`,
+    to: recipients.join(", "),
+    replyTo: email,
+    subject: `New Feedback — ${type} from ${who}`,
+    text,
+    html,
+  });
+}
+

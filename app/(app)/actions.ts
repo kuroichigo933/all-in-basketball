@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getChecklistsForSpecificDrills } from "@/lib/google-drive";
 import { appendFeedbackRow } from "@/lib/google-sheets";
-import { sendReviewEmail, sendBookingEmail } from "@/lib/email";
+import { sendReviewEmail, sendBookingEmail, sendFeedbackEmail } from "@/lib/email";
 
 async function requireUser() {
   const supabase = createClient();
@@ -207,6 +207,18 @@ export async function submitFeedback(type: string, message: string) {
       status: "New",
       submittedAt: new Date().toISOString(),
     });
+
+    try {
+      await sendFeedbackEmail({
+        name: profile?.full_name || "",
+        email: user.email ?? "",
+        type: cleanType,
+        message: message.trim(),
+      });
+    } catch (emailErr) {
+      console.error("[Feedback] email notification failed:", emailErr);
+    }
+
     return { ok: true as const };
   } catch (err) {
     console.error("[Feedback] submit failed:", err);
