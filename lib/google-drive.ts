@@ -61,8 +61,9 @@ export async function getAccessToken(): Promise<string> {
   const header = { alg: "RS256", typ: "JWT" };
   const payload = {
     iss: email,
-    // Drive (read-only drill library) + Sheets (append feedback rows).
-    scope: "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets",
+    // Read-only Drive (drill library) + Sheets (append feedback rows). No Drive
+    // writes are performed, so the narrower read-only scope limits blast radius.
+    scope: "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets",
     aud: "https://oauth2.googleapis.com/token",
     exp: now + 3600,
     iat: now,
@@ -339,6 +340,17 @@ export const getDrillLibraryCached = unstable_cache(
   ["drill-library"],
   { revalidate: 600, tags: ["drill-library"] }
 );
+
+// True if fileId is a video in the (cached) drill library. The video proxy uses
+// this so it can't be abused to stream arbitrary Drive files the service account
+// can see.
+export async function isLibraryVideo(fileId: string): Promise<boolean> {
+  const cats = await getDrillLibraryCached();
+  for (const c of cats)
+    for (const t of c.tiers)
+      for (const d of t.drills) if (d.id === fileId) return true;
+  return false;
+}
 
 // Early access: drills uploaded to Drive within the last 7 days are Professional
 // (and coach) only. For anyone else (Basic tier), drop them so they're hidden

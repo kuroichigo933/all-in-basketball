@@ -5,9 +5,3 @@ const rank: Record<Tier, number> = { free: 0, basic: 1, professional: 2 };
 export function hasTier(userTier: Tier, required: Tier) {
   return rank[userTier] >= rank[required];
 }
-
-export const TIER_LABEL: Record<Tier, string> = {
-  free: "Free",
-  basic: "Basic",
-  professional: "Professional",
-};

@@ -9,8 +9,10 @@ const BUCKET = "review-videos";
 const TTL_DAYS = 14;
 
 export async function GET(request: Request) {
+  // Fail closed: require the secret to be configured AND matched. (Vercel Cron
+  // sends this Bearer header automatically when CRON_SECRET is set.)
   const secret = process.env.CRON_SECRET;
-  if (secret && request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

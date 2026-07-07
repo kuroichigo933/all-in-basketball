@@ -15,6 +15,14 @@ async function requireUser() {
   return { supabase, user };
 }
 
+// Authorization guard for coach-only actions. Don't rely on RLS alone.
+async function requireCoach() {
+  const { supabase, user } = await requireUser();
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  if (profile?.role !== "coach") redirect("/dashboard");
+  return { supabase, user };
+}
+
 async function awardBadge(userId: string, code: string) {
   const admin = createAdminClient();
   await admin.from("user_badges").upsert({ user_id: userId, badge_code: code }, { onConflict: "user_id,badge_code", ignoreDuplicates: true });
@@ -24,8 +32,11 @@ async function awardBadge(userId: string, code: string) {
 export async function completeOnboarding(formData: FormData) {
   const { supabase, user } = await requireUser();
   const goals = formData.getAll("goals").map(String);
+  // Never trust a client-supplied privileged role; onboarding is player/parent only.
+  const roleInput = String(formData.get("role") ?? "player");
+  const role = roleInput === "parent" ? "parent" : "player";
   await supabase.from("profiles").update({
-    role: String(formData.get("role") ?? "player"),
+    role,
     age_group: String(formData.get("age_group") ?? "adult"),
     position: String(formData.get("position") ?? "unsure"),
     skill_level: String(formData.get("skill_level") ?? "beginner"),
@@ -167,16 +178,15 @@ export async function finalizeFilmReview(
 }
 
 export async function postFeedback(submissionId: string, body: string) {
-  const { supabase } = await requireUser();
-  const { data: { user } } = await supabase.auth.getUser();
-  await supabase.from("review_feedback").insert({ submission_id: submissionId, coach_id: user!.id, body });
+  const { supabase, user } = await requireCoach();
+  await supabase.from("review_feedback").insert({ submission_id: submissionId, coach_id: user.id, body });
   await supabase.from("review_submissions").update({ status: "complete" }).eq("id", submissionId);
   revalidatePath("/coach");
   revalidatePath("/review");
 }
 
 export async function claimSubmission(submissionId: string) {
-  const { supabase } = await requireUser();
+  const { supabase } = await requireCoach();
   await supabase.from("review_submissions").update({ status: "in_review" }).eq("id", submissionId);
   revalidatePath("/coach");
 }
@@ -223,7 +233,7 @@ export async function sendBookingRequest(input: {
 }
 
 export async function setBookingStatus(bookingId: string, status: "confirmed" | "completed" | "cancelled") {
-  const { supabase } = await requireUser();
+  const { supabase } = await requireCoach();
   await supabase.from("bookings").update({ status }).eq("id", bookingId);
   if (status === "cancelled") {
     const admin = createAdminClient();
@@ -246,7 +256,7 @@ export async function addAvailability(startsAtISO: string, durationMinutes: numb
 
 // ---------- Family ----------
 export async function createChildInvite() {
-  const { supabase, user } = await requireUser();
+  const { user } = await requireUser();
   const code = Math.random().toString(36).slice(2, 8).toUpperCase();
   // placeholder child id = parent until accepted? No — store invite with code, child claims it.
   // Simpler model: parent generates a code row keyed to themselves; child redeems it.
@@ -258,7 +268,7 @@ export async function createChildInvite() {
 }
 
 export async function redeemChildInvite(code: string) {
-  const { supabase, user } = await requireUser();
+  const { user } = await requireUser();
   const admin = createAdminClient();
   const { data: link } = await admin.from("parent_links")
     .select("parent_id").eq("invite_code", code.toUpperCase()).eq("accepted", false).single();

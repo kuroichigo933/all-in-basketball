@@ -15,6 +15,19 @@ function planFromPrice(priceId: string | undefined): Tier {
   return "free";
 }
 
+// Resolve a subscription's tier. The plan the user picked at checkout is carried
+// in the subscription metadata (authoritative), so a paying customer is never
+// left on "free" just because a price-ID env var doesn't match. An active
+// subscription with an unrecognized price falls back to "basic", never "free".
+function planFromSub(sub: Stripe.Subscription): Tier {
+  const active = sub.status === "active" || sub.status === "trialing";
+  if (!active) return "free";
+  const meta = sub.metadata?.plan;
+  if (meta === "professional" || meta === "basic") return meta;
+  const byPrice = planFromPrice(sub.items.data[0]?.price.id);
+  return byPrice !== "free" ? byPrice : "basic";
+}
+
 async function userIdFromCustomer(customerId: string): Promise<string | null> {
   const admin = createAdminClient();
   const { data } = await admin.from("subscriptions")
@@ -54,9 +67,15 @@ async function syncSubscription(sub: Stripe.Subscription) {
   const userId = await userIdFromCustomer(sub.customer as string);
   if (!userId) return;
 
-  const priceId = sub.items.data[0]?.price.id;
-  const active = sub.status === "active" || sub.status === "trialing";
-  const plan: Tier = active ? planFromPrice(priceId) : "free";
+  const plan: Tier = planFromSub(sub);
+
+  // Newer Stripe API versions moved current_period_end from the subscription to
+  // its items. Read either, and guard against a bad value (undefined → NaN would
+  // throw on toISOString and 500 the whole webhook).
+  const cpe: unknown =
+    (sub as any).current_period_end ?? (sub as any).items?.data?.[0]?.current_period_end;
+  const currentPeriodEnd =
+    typeof cpe === "number" && Number.isFinite(cpe) ? new Date(cpe * 1000).toISOString() : null;
 
   await admin.from("subscriptions").upsert({
     user_id: userId,
@@ -64,7 +83,7 @@ async function syncSubscription(sub: Stripe.Subscription) {
     stripe_subscription_id: sub.id,
     plan,
     status: sub.status,
-    current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+    current_period_end: currentPeriodEnd,
   });
   await admin.from("profiles").update({ tier: plan }).eq("id", userId);
 }
@@ -81,6 +100,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
+  try {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -101,18 +121,19 @@ export async function POST(request: Request) {
     case "invoice.paid": {
       // grant monthly credits on every paid billing cycle (no rollover)
       const invoice = event.data.object as Stripe.Invoice;
-      const priceId = invoice.lines.data[0]?.price?.id;
       const userId = invoice.customer ? await userIdFromCustomer(invoice.customer as string) : null;
-      
-      if (userId) {
-        if (priceId === process.env.STRIPE_PRICE_PROFESSIONAL) {
-          await setCredits(userId, PROFESSIONAL_MONTHLY_CREDITS);
-        } else if (priceId === process.env.STRIPE_PRICE_BASIC) {
-          await setCredits(userId, BASIC_MONTHLY_CREDITS);
-        }
+      const subId = invoice.subscription as string | null;
+      if (userId && subId) {
+        const sub = await stripe.subscriptions.retrieve(subId);
+        const plan = planFromSub(sub);
+        await setCredits(userId, plan === "professional" ? PROFESSIONAL_MONTHLY_CREDITS : BASIC_MONTHLY_CREDITS);
       }
       break;
     }
+  }
+  } catch (err) {
+    console.error(`[stripe webhook] error handling ${event.type} (${event.id}):`, err);
+    return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });

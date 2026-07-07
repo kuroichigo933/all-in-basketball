@@ -63,6 +63,9 @@ export async function POST(request: Request) {
     payment_method_collection: "if_required",
     client_reference_id: user.id,
     metadata: { supabase_user_id: user.id, plan },
+    // Stamp the chosen plan onto the subscription so the webhook can grant the
+    // right tier from metadata — independent of price-ID env matching.
+    subscription_data: { metadata: { supabase_user_id: user.id, plan } },
     success_url: `${SITE}/dashboard?upgraded=1`,
     cancel_url: `${SITE}/pricing`,
   });
