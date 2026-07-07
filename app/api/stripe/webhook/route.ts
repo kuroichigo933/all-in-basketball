@@ -22,6 +22,12 @@ function planFromPrice(priceId: string | undefined): Tier {
 function planFromSub(sub: Stripe.Subscription): Tier {
   const active = sub.status === "active" || sub.status === "trialing";
   if (!active) return "free";
+  return getPlanFromSubObject(sub);
+}
+
+// Extract plan regardless of subscription status. Essential for invoice.paid
+// where subscription status might still be "incomplete" during initial checkout.
+function getPlanFromSubObject(sub: Stripe.Subscription): Tier {
   const meta = sub.metadata?.plan;
   if (meta === "professional" || meta === "basic") return meta;
   const byPrice = planFromPrice(sub.items.data[0]?.price.id);
@@ -125,7 +131,7 @@ export async function POST(request: Request) {
       const subId = invoice.subscription as string | null;
       if (userId && subId) {
         const sub = await stripe.subscriptions.retrieve(subId);
-        const plan = planFromSub(sub);
+        const plan = getPlanFromSubObject(sub);
         await setCredits(userId, plan === "professional" ? PROFESSIONAL_MONTHLY_CREDITS : BASIC_MONTHLY_CREDITS);
       }
       break;
