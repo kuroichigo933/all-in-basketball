@@ -34,7 +34,11 @@ export default async function Library() {
   return (
     <>
       <PageTitle kicker="Drill library" title="Put in the work" />
-      <DrillLibrary categories={categories} completedIds={completedIds} />
+      <DrillLibrary
+        categories={categories}
+        completedIds={completedIds}
+        userTier={profile?.tier ?? "free"}
+      />
     </>
   );
 }

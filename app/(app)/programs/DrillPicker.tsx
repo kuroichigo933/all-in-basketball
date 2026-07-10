@@ -6,6 +6,13 @@ import { fetchChecklistsForQueueAction } from "@/app/(app)/actions";
 
 type QueueItem = DrillFile & { category: string; tier: string };
 
+type StructuredPlan = {
+  name: string;
+  description: string;
+  drillNames: string[];
+  queue: QueueItem[];
+};
+
 // Order tiers Beginner → Intermediate → Advanced/Expert, tolerant of casing and
 // stray whitespace in the Drive folder names (e.g. "Beginner ").
 const TIER_ORDER = ["beginner", "intermediate", "advanced", "expert"];
@@ -23,7 +30,13 @@ const DEFAULT_CHECKLIST = [
   "Finish with 5 clean reps in a row",
 ];
 
-export default function DrillPicker({ categories }: { categories: DrillCategory[] }) {
+export default function DrillPicker({
+  categories,
+  structuredPlans = [],
+}: {
+  categories: DrillCategory[];
+  structuredPlans?: StructuredPlan[];
+}) {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [playing, setPlaying] = useState<number | null>(null);
   const [openCat, setOpenCat] = useState<string | null>(categories[0]?.category ?? null);
@@ -196,97 +209,165 @@ export default function DrillPicker({ categories }: { categories: DrillCategory[
   }
 
   return (
-    <div className={`grid gap-4 lg:grid-cols-[1fr_300px] ${queue.length >= 2 ? "pb-28 lg:pb-0" : ""}`}>
-      {/* Drill selector */}
-      <div className="space-y-2">
-        {categories.map((cat) => {
-          const isOpen = openCat === cat.category;
-          return (
-            <div key={cat.category} className="card overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setOpenCat(isOpen ? null : cat.category)}
-                className="flex w-full items-center justify-between p-4 text-left"
-              >
-                <span className="display text-lg">{cat.category}</span>
-                <span className="text-muted">{isOpen ? "▲" : "▼"}</span>
-              </button>
-              {isOpen && (
-                <div className="border-t border-line px-4 pb-4 pt-3 space-y-4">
-                  {[...cat.tiers]
-                    .sort((a, b) => tierRank(a.tier) - tierRank(b.tier) || a.tier.localeCompare(b.tier))
-                    .map((tierData) => {
-                      const tierName = tierData.tier;
-                      return (
-                        <div key={tierName}>
-                          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-wood">{tierName.trim()}</p>
-                          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                            {tierData.drills.map((drill) => {
-                              const inQueue = queue.some((q) => q.id === drill.id);
-                              return (
-                                <button
-                                  key={drill.id}
-                                  type="button"
-                                  onClick={() => toggle(drill, cat.category, tierName)}
-                                  className={`flex items-center justify-between gap-2 rounded-card border px-3 py-2 text-left text-sm transition-colors
-                                    ${inQueue
-                                      ? "border-game bg-game/10 text-game"
-                                      : "border-line text-chalk hover:border-game"}`}
-                                >
-                                  <span className="truncate">{drill.name}</span>
-                                  <span className="flex-none text-xs">{inQueue ? "✓" : "+"}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
+    <div className="space-y-10">
+      {/* 1. Structured Workout Plans (Comes Up First!) */}
+      {structuredPlans.length > 0 && (
+        <section>
+          <div className="flex items-baseline gap-3">
+            <h2 className="display text-xl sm:text-2xl">Structured Program</h2>
+          </div>
+          <p className="mt-1 text-sm text-muted">
+            Follow a structured path designed by professional coaches to progress your skills step-by-step.
+          </p>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            {structuredPlans.map((plan) => {
+              const hasMatchedDrills = plan.queue.length > 0;
+              return (
+                <div key={plan.name} className="card p-6 border-game/40 flex flex-col justify-between">
+                  <div>
+                    <h3 className="display text-2xl text-game mb-2">{plan.name}</h3>
+                    <p className="text-sm text-muted mb-4">{plan.description}</p>
+                    <div className="max-h-40 overflow-y-auto rounded-card bg-raised/50 p-3 border border-line mb-5">
+                      <ol className="list-decimal list-inside text-xs space-y-1.5">
+                        {plan.drillNames.map((name, i) => {
+                          const matched = plan.queue.some(
+                            (q) => q.name.toLowerCase().replace(/[^a-z0-9]/g, "") === name.toLowerCase().replace(/[^a-z0-9]/g, "")
+                          );
+                          return (
+                            <li key={i} className={matched ? "text-chalk font-semibold" : "text-muted/30 line-through"}>
+                              {name} {!matched && "(not uploaded)"}
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </div>
+                  </div>
+                  {hasMatchedDrills ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQueue(plan.queue);
+                        setShowModeSelect(true);
+                      }}
+                      className="btn-game w-full text-center py-2.5 text-sm font-semibold shadow-lg"
+                    >
+                      Load &amp; Start Workout
+                    </button>
+                  ) : (
+                    <div className="text-xs text-center text-muted border border-dashed border-line p-3 rounded-card">
+                      Videos not uploaded to Google Drive yet.
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
-      {/* Queue */}
-      <div className="card p-4 h-fit sticky top-20">
-        <p className="display text-lg">Your session</p>
-        {queue.length === 0 ? (
-          <p className="mt-3 text-sm text-muted">Pick drills on the left to add them here.</p>
-        ) : (
-          <ol className="mt-3 space-y-1.5">
-            {queue.map((d, i) => (
-              <li key={d.id} className="flex items-center gap-2 rounded-card border border-line px-2.5 py-2 text-sm">
-                <span className="score w-5 flex-none text-center text-xs text-muted">{i + 1}</span>
-                <span className="flex-1 truncate">{d.name}</span>
-                <div className="flex gap-1 flex-none">
-                  <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
-                    className="text-xs text-muted hover:text-chalk disabled:opacity-30">↑</button>
-                  <button type="button" onClick={() => move(i, 1)} disabled={i === queue.length - 1}
-                    className="text-xs text-muted hover:text-chalk disabled:opacity-30">↓</button>
-                  <button type="button" onClick={() => toggle(d, d.category, d.tier)}
-                    className="text-xs text-muted hover:text-game">✕</button>
+      {/* 2. Custom Session Creator */}
+      <section>
+        <div className="flex items-baseline gap-3">
+          <h2 className="display text-xl sm:text-2xl">Custom session</h2>
+          <span className="text-xs uppercase tracking-wider text-muted">pick drills, play in order</span>
+        </div>
+        <p className="mt-1 text-sm text-muted">
+          Pick drills from any category and tier on the left. We&apos;ll queue them up and play through the whole session.
+        </p>
+
+        <div className={`mt-4 grid gap-4 lg:grid-cols-[1fr_300px] ${queue.length >= 2 ? "pb-28 lg:pb-0" : ""}`}>
+          {/* Drill selector */}
+          <div className="space-y-2">
+            {categories.map((cat) => {
+              const isOpen = openCat === cat.category;
+              return (
+                <div key={cat.category} className="card overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setOpenCat(isOpen ? null : cat.category)}
+                    className="flex w-full items-center justify-between p-4 text-left"
+                  >
+                    <span className="display text-lg">{cat.category}</span>
+                    <span className="text-muted">{isOpen ? "▲" : "▼"}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="border-t border-line px-4 pb-4 pt-3 space-y-4">
+                      {[...cat.tiers]
+                        .sort((a, b) => tierRank(a.tier) - tierRank(b.tier) || a.tier.localeCompare(b.tier))
+                        .map((tierData) => {
+                          const tierName = tierData.tier;
+                          return (
+                            <div key={tierName}>
+                              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-wood">{tierName.trim()}</p>
+                              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                                {tierData.drills.map((drill) => {
+                                  const inQueue = queue.some((q) => q.id === drill.id);
+                                  return (
+                                    <button
+                                      key={drill.id}
+                                      type="button"
+                                      onClick={() => toggle(drill, cat.category, tierName)}
+                                      className={`flex items-center justify-between gap-2 rounded-card border px-3 py-2 text-left text-sm transition-colors
+                                        ${inQueue
+                                          ? "border-game bg-game/10 text-game"
+                                          : "border-line text-chalk hover:border-game"}`}
+                                    >
+                                      <span className="truncate">{drill.name}</span>
+                                      <span className="flex-none text-xs">{inQueue ? "✓" : "+"}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
                 </div>
-              </li>
-            ))}
-          </ol>
-        )}
-        <button
-          type="button"
-          className="btn-game mt-4 hidden w-full lg:block"
-          disabled={queue.length === 0}
-          onClick={() => setShowModeSelect(true)}
-        >
-          Start session ({queue.length} drill{queue.length !== 1 ? "s" : ""})
-        </button>
-        {queue.length > 0 && (
-          <button type="button" onClick={() => setQueue([])}
-            className="mt-2 w-full text-center text-xs text-muted hover:text-game">
-            Clear all
-          </button>
-        )}
-      </div>
+              );
+            })}
+          </div>
+
+          {/* Queue */}
+          <div className="card p-4 h-fit sticky top-20">
+            <p className="display text-lg">Your session</p>
+            {queue.length === 0 ? (
+              <p className="mt-3 text-sm text-muted">Pick drills on the left to add them here.</p>
+            ) : (
+              <ol className="mt-3 space-y-1.5">
+                {queue.map((d, i) => (
+                  <li key={d.id} className="flex items-center gap-2 rounded-card border border-line px-2.5 py-2 text-sm">
+                    <span className="score w-5 flex-none text-center text-xs text-muted">{i + 1}</span>
+                    <span className="flex-1 truncate">{d.name}</span>
+                    <div className="flex gap-1 flex-none">
+                      <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
+                        className="text-xs text-muted hover:text-chalk disabled:opacity-30">↑</button>
+                      <button type="button" onClick={() => move(i, 1)} disabled={i === queue.length - 1}
+                        className="text-xs text-muted hover:text-chalk disabled:opacity-30">↓</button>
+                      <button type="button" onClick={() => toggle(d, d.category, d.tier)}
+                        className="text-xs text-muted hover:text-game">✕</button>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <button
+              type="button"
+              className="btn-game mt-4 hidden w-full lg:block"
+              disabled={queue.length === 0}
+              onClick={() => setShowModeSelect(true)}
+            >
+              Start session ({queue.length} drill{queue.length !== 1 ? "s" : ""})
+            </button>
+            {queue.length > 0 && (
+              <button type="button" onClick={() => setQueue([])}
+                className="mt-2 w-full text-center text-xs text-muted hover:text-game">
+                Clear all
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Sticky "Start session" CTA — follows you on mobile/tablet so the next
           step is obvious. Appears once at least 2 drills are queued; sits just

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { DrillCategory } from "@/lib/google-drive";
 import DrillVideoCard from "@/components/DrillVideoCard";
+import { isAllowedFreeDrill } from "@/lib/tiers";
 
 // Order tiers Beginner → Intermediate → Advanced/Expert, tolerant of casing and
 // stray whitespace in the Drive folder names (e.g. "Beginner ").
@@ -22,9 +23,11 @@ function sortTiers<T extends { tier: string }>(tiers: T[]): T[] {
 export default function DrillLibrary({
   categories,
   completedIds,
+  userTier,
 }: {
   categories: DrillCategory[];
   completedIds: string[];
+  userTier: string;
 }) {
   const completed = new Set(completedIds);
   const [open, setOpen] = useState<string | null>(categories[0]?.category ?? null);
@@ -55,15 +58,19 @@ export default function DrillLibrary({
                   <div key={tier}>
                     <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-wood">{tier}</p>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {drills.map((drill) => (
-                        <DrillVideoCard
-                          key={drill.id}
-                          drill={drill}
-                          category={cat.category}
-                          tier={tier}
-                          completed={completed.has(drill.id)}
-                        />
-                      ))}
+                      {drills.map((drill) => {
+                        const isLocked = userTier === "free" && !isAllowedFreeDrill(drill.name);
+                        return (
+                          <DrillVideoCard
+                            key={drill.id}
+                            drill={drill}
+                            category={cat.category}
+                            tier={tier}
+                            completed={completed.has(drill.id)}
+                            locked={isLocked}
+                          />
+                        );
+                      })}
                     </div>
                   </div>
                 ))}

@@ -1,10 +1,43 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageTitle } from "@/components/ui";
-import { getDrillLibraryCached, filterEarlyAccess } from "@/lib/google-drive";
+import { getDrillLibraryCached, filterEarlyAccess, type DrillCategory, type DrillFile } from "@/lib/google-drive";
+import { STRUCTURED_PLANS } from "@/lib/structured-plans";
 import DrillPicker from "./DrillPicker";
 
 export const dynamic = "force-dynamic";
+
+function getStructuredPlansWithQueues(categories: DrillCategory[]) {
+  // Build a flat map of all available drills in Drive
+  const drillMap = new Map<string, { drill: DrillFile; category: string; tier: string }>();
+  for (const cat of categories) {
+    for (const t of cat.tiers) {
+      for (const d of t.drills) {
+        const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+        drillMap.set(normalize(d.name), { drill: d, category: cat.category, tier: t.tier });
+      }
+    }
+  }
+
+  return STRUCTURED_PLANS.map((plan) => {
+    const queue: (DrillFile & { category: string; tier: string })[] = [];
+    for (const name of plan.drillNames) {
+      const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const match = drillMap.get(normalize(name));
+      if (match) {
+        queue.push({
+          ...match.drill,
+          category: match.category,
+          tier: match.tier
+        });
+      }
+    }
+    return {
+      ...plan,
+      queue
+    };
+  });
+}
 
 export default async function Programs() {
   const supabase = createClient();
@@ -21,28 +54,28 @@ export default async function Programs() {
   const canSeeNew = profile?.role === "coach" || profile?.tier === "professional";
   const driveCategories = filterEarlyAccess(await getDrillLibraryCached(), canSeeNew);
 
+  const structuredPlans = getStructuredPlansWithQueues(driveCategories);
+
   return (
     <>
       <PageTitle kicker="Train" title="Build your session" />
 
-      <section className="mb-10">
-        <div className="flex items-baseline gap-3">
-          <h2 className="display text-xl sm:text-2xl">Custom session</h2>
-          <span className="text-xs uppercase tracking-wider text-muted">pick drills, play in order</span>
-        </div>
-        <p className="mt-1 text-sm text-muted">
-          Pick drills from any category and tier. We&apos;ll queue them up and play through the whole session.
-        </p>
-        {driveCategories.length > 0 ? (
-          <div className="mt-4">
-            <DrillPicker categories={driveCategories} />
-          </div>
-        ) : (
+      {driveCategories.length > 0 && (
+        <section className="mb-10">
+          <DrillPicker
+            categories={driveCategories}
+            structuredPlans={structuredPlans}
+          />
+        </section>
+      )}
+
+      {driveCategories.length === 0 && (
+        <section className="mb-10">
           <p className="mt-3 text-sm text-muted">
             No drills loaded yet — check the Drills tab for connection status.
           </p>
-        )}
-      </section>
+        </section>
+      )}
 
       <section>
         <h2 className="display baseline pb-3 text-xl sm:text-2xl">Structured programs</h2>

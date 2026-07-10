@@ -53,12 +53,15 @@ export async function POST(request: Request) {
     // Don't force a card when nothing is owed (e.g. a 100%-off code) — the $0
     // checkout still completes and creates the subscription, so the webhook
     // grants the chosen tier without a payment method.
-    payment_method_collection: "if_required",
+    payment_method_collection: "always",
     client_reference_id: user.id,
     metadata: { supabase_user_id: user.id, plan },
     // Stamp the chosen plan onto the subscription so the webhook can grant the
     // right tier from metadata — independent of price-ID env matching.
-    subscription_data: { metadata: { supabase_user_id: user.id, plan } },
+    subscription_data: { 
+      metadata: { supabase_user_id: user.id, plan },
+      trial_period_days: 3,
+    },
     success_url: `${SITE}/dashboard?upgraded=1`,
     cancel_url: `${SITE}/pricing`,
   });

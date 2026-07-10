@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getVideoStream, isLibraryVideo } from "@/lib/google-drive";
+import { getVideoStream, getDrillByFileId } from "@/lib/google-drive";
+import { isAllowedFreeDrill } from "@/lib/tiers";
 
 // Serves drill-library videos from Google Drive. Review footage no longer flows
 // through here — it lives in Supabase storage and is served via signed URLs.
@@ -13,10 +14,26 @@ export async function GET(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Only stream files that are actually in the drill library — never an
-  // arbitrary Drive fileId the service account happens to have access to.
-  if (!(await isLibraryVideo(params.fileId))) {
+  // Fetch the drill to perform access control validation
+  const drill = await getDrillByFileId(params.fileId);
+  if (!drill) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // Retrieve user's subscription tier
+  const { data: profile } = await supabase.from("profiles")
+    .select("tier")
+    .eq("id", user.id)
+    .single();
+
+  const userTier = profile?.tier ?? "free";
+
+  // If the user has a free tier profile, check if the video is allowed on free tier
+  if (userTier === "free" && !isAllowedFreeDrill(drill.name)) {
+    return NextResponse.json(
+      { error: "Forbidden: This video is locked on the free tier" },
+      { status: 403 }
+    );
   }
 
   const range = request.headers.get("range") ?? undefined;

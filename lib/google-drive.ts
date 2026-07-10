@@ -341,15 +341,20 @@ export const getDrillLibraryCached = unstable_cache(
   { revalidate: 600, tags: ["drill-library"] }
 );
 
+export async function getDrillByFileId(fileId: string): Promise<DrillFile | null> {
+  const cats = await getDrillLibraryCached();
+  for (const c of cats)
+    for (const t of c.tiers)
+      for (const d of t.drills) if (d.id === fileId) return d;
+  return null;
+}
+
 // True if fileId is a video in the (cached) drill library. The video proxy uses
 // this so it can't be abused to stream arbitrary Drive files the service account
 // can see.
 export async function isLibraryVideo(fileId: string): Promise<boolean> {
-  const cats = await getDrillLibraryCached();
-  for (const c of cats)
-    for (const t of c.tiers)
-      for (const d of t.drills) if (d.id === fileId) return true;
-  return false;
+  const drill = await getDrillByFileId(fileId);
+  return drill !== null;
 }
 
 // Early access: drills uploaded to Drive within the last 7 days are Professional
