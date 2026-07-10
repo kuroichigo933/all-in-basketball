@@ -18,3 +18,9 @@ out/
 *.pem
 *.tsbuildinfo
 
+# local validation media and browser exports
+validation/local/
+validation/observations/
+validation/manifest.json
+validation/tuned-config.json
+

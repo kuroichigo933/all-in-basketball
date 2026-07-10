@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/library", label: "Drills" },
   { href: "/programs", label: "Train" },
   { href: "/review", label: "Film Room" },
+  { href: "/ai-tracker", label: "AI Analyzer" },
   { href: "/progress", label: "Progress" },
   { href: "/book", label: "Book" },
   { href: "/feedback", label: "Feedback" },
@@ -24,7 +25,6 @@ export default function AppNav({ role, name }: { role: string; name: string }) {
   if (role === "parent") links.push({ href: "/family", label: "My Players" });
   if (role === "coach") {
     links.push({ href: "/coach", label: "Coach Desk" });
-    links.push({ href: "/ai-tracker", label: "AI Tracker" });
   }
 
   // Mobile bottom bar: 4 primary tabs + a "More" sheet for the rest.

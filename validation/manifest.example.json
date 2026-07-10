@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "toleranceMs": 300,
+  "clips": [
+    {
+      "id": "behind-back-01-000",
+      "sourceId": "behind-back-01",
+      "segmentId": "000",
+      "cohort": "controlled-frontal-2026-07",
+      "split": "calibration",
+      "video": "local/videos/behind-back-01/behind-back-01-000.mp4",
+      "observations": "observations/behind-back-01-000.json",
+      "expected": [{ "move": "behind-the-back", "startMs": 1200, "endMs": 1800 }]
+    },
+    {
+      "id": "between-legs-01-001",
+      "sourceId": "between-legs-01",
+      "segmentId": "001",
+      "cohort": "controlled-frontal-2026-07",
+      "split": "holdout",
+      "video": "local/videos/between-legs-01/between-legs-01-001.mp4",
+      "observations": "observations/between-legs-01-001.json",
+      "expected": [{ "move": "between-the-legs", "startMs": 2200, "endMs": 2800 }]
+    }
+  ]
+}

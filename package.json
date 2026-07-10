@@ -5,6 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "node scripts/migrate.mjs && next build",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "benchmark": "node --experimental-strip-types scripts/benchmark-moves.ts",
+    "validate:moves": "node --experimental-strip-types scripts/evaluate-validation.ts",
+    "validation:prepare": "node --experimental-strip-types scripts/prepare-validation.ts",
+    "validation:tune": "node --experimental-strip-types scripts/tune-validation.ts",
     "migrate": "node scripts/migrate.mjs",
     "start": "next start"
   },

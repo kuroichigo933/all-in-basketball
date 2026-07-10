@@ -10,16 +10,11 @@ export default async function AITrackerPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase.from("profiles")
-    .select("role").eq("id", user.id).single();
-  
-  // if (profile?.role !== "coach") redirect("/dashboard");
-
   return (
     <>
-      <PageTitle kicker="Admin Only" title="AI Movement Tracker" />
+      <PageTitle kicker="Video Lab" title="Dribble Move Analyzer" />
       <p className="mb-6 text-muted">
-        Real-time pose and ball estimation using Google MediaPipe. Put your phone back, step into the frame, and let the AI count your reps.
+        Upload a short, stationary-camera clip with one full-body player and one ball. The controlled MVP evaluates crossover, between-the-legs, behind-the-back, hesitation, and in-and-out patterns.
       </p>
       
       <div className="card p-6 border-game/30">
