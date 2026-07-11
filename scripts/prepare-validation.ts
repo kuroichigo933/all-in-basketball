@@ -26,7 +26,7 @@ if (process.argv[1]?.endsWith("prepare-validation.ts")) {
   if (probe.status !== 0 || !Number.isFinite(duration)) throw new Error("ffprobe could not read input duration.");
   for (let index = 0, start = 0; start < duration; index += 1, start += args.segmentSeconds) {
     const target = resolve(output, `${args.id}-${String(index).padStart(3, "0")}.mp4`);
-    const run = spawnSync("ffmpeg", ["-y", "-ss", String(start), "-i", args.input, "-t", String(Math.min(args.segmentSeconds, duration - start)), "-map", "0:v:0", "-an", "-vf", "setpts=PTS-STARTPTS,scale=-2:720,fps=30", "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-movflags", "+faststart", target], { stdio: "inherit" });
+    const run = spawnSync("ffmpeg", ["-y", "-ss", String(start), "-i", args.input, "-t", String(Math.min(args.segmentSeconds, duration - start)), "-map", "0:v:0", "-an", "-vf", "setpts=PTS-STARTPTS,scale=-2:720,fps=30", "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-g", "30", "-keyint_min", "30", "-sc_threshold", "0", "-movflags", "+faststart", target], { stdio: "inherit" });
     if (run.status !== 0) throw new Error(`ffmpeg failed at segment ${index}.`);
   }
   writeFileSync(resolve(output, "source.json"), JSON.stringify({ sourceId: args.id, sourceFile: basename(args.input), move: args.move, segmentSeconds: args.segmentSeconds }, null, 2));

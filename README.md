@@ -59,7 +59,7 @@ npm install
 npm run dev
 ```
 
-For the controlled basketball video-analysis MVP, open `/ai-tracker` after signing in and choose a short prerecorded clip. See [`PROJECT.md`](PROJECT.md) for scope and validation commands.
+For the basketball tracking MVP, open `/ai-tracker` after signing in and start the front-facing camera. Upload analysis remains under the benchmark tab. See [`PROJECT.md`](PROJECT.md) for scope and validation commands.
 
 Sign up at `http://localhost:3000/signup` — the signup trigger creates the profile + stats rows
 automatically, and you'll land in the onboarding quiz.

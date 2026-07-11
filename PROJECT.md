@@ -2,12 +2,12 @@
 
 ## Product boundary
 
-The seven-day MVP analyzes prerecorded short clips containing one full-body player and one basketball with a mostly stationary camera. It runs MediaPipe pose and object detection in the browser, converts frames to normalized observations, and applies explainable temporal rules. It does not claim game-film robustness.
+The primary MVP uses the browser's front-facing camera for near-real-time tracking of one full-body player and one basketball. MediaPipe inference runs locally at approximately 10 FPS while the preview remains at the camera frame rate. Uploaded clips remain a secondary debugging and benchmark workflow.
 
 ## Progress
 
-- **Current milestone:** End-to-end controlled video analysis path.
-- **Completed:** Repository assessment; production baseline; upload/select UI; pose and ball extraction; normalized observations; bounded ball-gap tracking; JSON export; all five requested rule paths; configurable thresholds; timestamps, confidence, evidence, coverage warnings, no-result state; event evaluator; GPU-to-CPU fallback; tests and benchmark; documentation and environment template.
+- **Current milestone:** Live front-camera move tracking with shared upload benchmarks.
+- **Completed:** Front-camera preview; live pose/ball inference; four-second rolling history; temporary ball-gap tracking; live crossover, between-the-legs, and behind-the-back events; confidence, timestamps, repetition counts, trajectory overlays; shared upload benchmark path; validation tooling and all five offline rule paths.
 - **Current task:** Label the nine prepared controlled segments, export observations, tune on calibration, and run the held-out 95% gate.
 - **Latest verified result:** 12/12 tracking, detection, and evaluation tests pass; strict TypeScript and production build pass. Synthetic detector runtime was approximately 3 ms for 300 observations.
 - **Current blocker:** The supplied recordings are prepared, but exact human event labels and browser-produced MediaPipe observations are not yet exported; predictions cannot be used as ground truth.

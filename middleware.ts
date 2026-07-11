@@ -5,6 +5,12 @@ const PUBLIC_PATHS = ["/", "/login", "/signup", "/pricing", "/auth", "/samples",
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
+  const path = request.nextUrl.pathname;
+  const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + "/")) ||
+    path.startsWith("/validation-runner") ||
+    path.startsWith("/api") || path.startsWith("/_next");
+  if (isPublic) return response;
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -23,12 +29,7 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-  const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + "/")) ||
-    (process.env.NODE_ENV !== "production" && path.startsWith("/validation-runner")) ||
-    path.startsWith("/api") || path.startsWith("/_next");
-
-  if (!user && !isPublic) {
+  if (!user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", path);

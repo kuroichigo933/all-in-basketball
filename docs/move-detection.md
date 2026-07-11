@@ -14,6 +14,8 @@ Before classification, `trackBallContinuity` fills only gaps bounded by detectio
 
 Confidence combines observation quality and rule margin; it is a heuristic score, not a calibrated probability. Evidence strings expose the triggering features.
 
+Live mode evaluates the most recent four seconds after each 10 FPS inference sample. A move is emitted only near the end of its detected interval, then deduplicated for 900 ms. The live MVP prominently counts crossover, between-the-legs, and behind-the-back; hesitation and in-and-out remain available to the shared rule engine and upload benchmark.
+
 ## Configuration and limitations
 
 Thresholds live in `DEFAULT_MOVE_DETECTION_CONFIG` and can be overridden by the validation/tuning workflow without modifying detector logic. Behind-the-back remains a conservative 2D proxy: true body-relative depth is unavailable from the current ball detector. In-and-out hand ownership is inferred from endpoint proximity rather than tracked hand contact.

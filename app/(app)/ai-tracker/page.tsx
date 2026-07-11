@@ -14,7 +14,7 @@ export default async function AITrackerPage() {
     <>
       <PageTitle kicker="Video Lab" title="Dribble Move Analyzer" />
       <p className="mb-6 text-muted">
-        Upload a short, stationary-camera clip with one full-body player and one ball. The controlled MVP evaluates crossover, between-the-legs, behind-the-back, hesitation, and in-and-out patterns.
+        Start the front-facing camera for near-real-time player, ball, and dribble-move tracking. Uploaded clips remain available as a secondary benchmark workflow.
       </p>
       
       <div className="card p-6 border-game/30">
