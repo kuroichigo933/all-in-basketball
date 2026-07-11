@@ -13,7 +13,7 @@ export type MotionObservation = {
   leftKnee: Point;
   rightKnee: Point;
   ball: Point | null;
-  ballSource?: "detected" | "interpolated" | "missing";
+  ballSource?: "detected" | "color" | "motion" | "interpolated" | "missing";
 };
 
 export type MoveName = "crossover" | "between-the-legs" | "behind-the-back" | "hesitation" | "in-and-out";
