@@ -29,6 +29,8 @@ The default analyzer mode requests `facingMode: "user"` and keeps camera preview
 
 Completed events are deduplicated with a short cooldown and update per-move repetition counts. Short ball losses are filled only when bounded by plausible detections. Upload analysis calls the same tracker and move detector.
 
+Ball acquisition fuses three signals: the generic `sports ball` model, compact color components, and color-independent moving components. `OnlineBallTracker` scores candidates against a velocity prediction, rejects implausible jumps, and predicts through losses up to roughly 320 ms. A user can tap the ball once in the mirrored preview to seed the tracker when automatic acquisition is ambiguous.
+
 ## Key decisions
 
 - Retain a single Next.js deployment: the current browser MediaPipe dependency is adequate for a controlled prototype.

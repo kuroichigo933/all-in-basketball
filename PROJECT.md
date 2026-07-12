@@ -7,9 +7,9 @@ The primary MVP uses the browser's front-facing camera for near-real-time tracki
 ## Progress
 
 - **Current milestone:** Live front-camera move tracking with shared upload benchmarks.
-- **Completed:** Front-camera preview; live pose/ball inference; four-second rolling history; temporary ball-gap tracking; live crossover, between-the-legs, and behind-the-back events; confidence, timestamps, repetition counts, trajectory overlays; shared upload benchmark path; validation tooling and all five offline rule paths.
+- **Completed:** Front-camera preview; multi-signal color-independent ball acquisition; predictive candidate fusion; tap-to-lock; four-second rolling history; temporary loss prediction; live move events, confidence, timestamps, repetition counts, persistent expanded view, and shared upload benchmarks.
 - **Current task:** Label the nine prepared controlled segments, export observations, tune on calibration, and run the held-out 95% gate.
-- **Latest verified result:** 12/12 tracking, detection, and evaluation tests pass; strict TypeScript and production build pass. Synthetic detector runtime was approximately 3 ms for 300 observations.
+- **Latest verified result:** 22/22 tracking, detection, and evaluation tests pass; strict TypeScript and production build pass. Controlled orange-ball exports retain 100% ball coverage; grayscale live-camera testing retains ball tracking through expanded view.
 - **Current blocker:** The supplied recordings are prepared, but exact human event labels and browser-produced MediaPipe observations are not yet exported; predictions cannot be used as ground truth.
 - **Next task:** Add real exported observations to the validation manifest and run `npm run validate:moves`.
 

@@ -36,9 +36,47 @@ function quality(window: MotionObservation[]) {
   return window.reduce((sum, o) => sum + Math.min(o.poseConfidence, o.ballConfidence), 0) / window.length;
 }
 
+const SAME_MOVE_DEDUPE_GAP_MS = 250;
+const COMPETING_MOVE_CENTER_GAP_MS = 350;
+const MOVE_SPECIFICITY: Record<MoveDetection["move"], number> = {
+  "between-the-legs": 3,
+  "behind-the-back": 3,
+  "in-and-out": 2,
+  crossover: 1,
+  hesitation: 0,
+};
+
 function addIfDistinct(found: MoveDetection[], detection: MoveDetection) {
-  const previous = found.at(-1);
-  if (!previous || detection.startMs - previous.endMs > 400 || detection.move !== previous.move) found.push(detection);
+  const duplicateIndex = found.findIndex((candidate) =>
+    candidate.move === detection.move &&
+    detection.startMs <= candidate.endMs + SAME_MOVE_DEDUPE_GAP_MS &&
+    detection.endMs >= candidate.startMs - SAME_MOVE_DEDUPE_GAP_MS);
+  if (duplicateIndex < 0) {
+    found.push(detection);
+    return;
+  }
+  if (detection.confidence > found[duplicateIndex].confidence) found[duplicateIndex] = detection;
+}
+
+const eventCenterMs = (detection: MoveDetection) => (detection.startMs + detection.endMs) / 2;
+const arbitrationScore = (detection: MoveDetection) => detection.confidence + MOVE_SPECIFICITY[detection.move] * 0.025;
+
+/**
+ * Sliding temporal windows can describe one physical ball transfer several ways.
+ * Keep one label for candidates with effectively the same event center, favoring
+ * stronger evidence and then the anatomically more specific rule.
+ */
+export function resolveMoveDetections(detections: MoveDetection[]): MoveDetection[] {
+  const ranked = [...detections].sort((a, b) =>
+    arbitrationScore(b) - arbitrationScore(a) ||
+    b.confidence - a.confidence ||
+    a.startMs - b.startMs);
+  const accepted: MoveDetection[] = [];
+  for (const candidate of ranked) {
+    if (accepted.some((event) => Math.abs(eventCenterMs(event) - eventCenterMs(candidate)) <= COMPETING_MOVE_CENTER_GAP_MS)) continue;
+    accepted.push(candidate);
+  }
+  return accepted.sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs || b.confidence - a.confidence);
 }
 
 export function detectMoves(observations: MotionObservation[], config: MoveDetectionConfig = DEFAULT_MOVE_DETECTION_CONFIG): MoveDetection[] {
@@ -116,7 +154,7 @@ export function detectMoves(observations: MotionObservation[], config: MoveDetec
     }
   }
 
-  return found.sort((a, b) => a.startMs - b.startMs || b.confidence - a.confidence);
+  return resolveMoveDetections(found);
 }
 
 export function summarizeAnalysis(observations: MotionObservation[]): AnalysisSummary {

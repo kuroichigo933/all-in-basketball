@@ -5,7 +5,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-VIDEO = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "validation" / "local" / "fake-camera.y4m"
+VIDEO = (Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "validation" / "local" / "fake-camera.y4m").resolve()
 
 async def main():
     async with async_playwright() as playwright:
@@ -24,13 +24,14 @@ async def main():
         await page.get_by_role("button", name="Full screen").click()
         await page.wait_for_timeout(8_000)
         expanded_tracking = await page.locator("section").filter(has_text="Tracking confidence").inner_text()
-        await page.get_by_role("button", name="Exit full screen").click()
+        await page.get_by_role("button", name="Exit full screen").last.click()
         await page.wait_for_timeout(10_000)
         tracking = await page.locator("section").filter(has_text="Tracking confidence").inner_text()
         repetitions = await page.locator("section").filter(has_text="Repetitions").inner_text()
         events = await page.locator("section").filter(has_text="Recent moves").inner_text()
         await page.get_by_role("button", name="Stop camera").click()
-        stopped = await page.get_by_text("Camera stopped.").is_visible()
+        await page.get_by_text("Camera stopped.").wait_for(timeout=10_000)
+        stopped = True
         print(json.dumps({"trackingDuringExpandedView": expanded_tracking, "tracking": tracking, "repetitions": repetitions, "events": events, "cameraStopped": stopped}, indent=2))
         await browser.close()
 
