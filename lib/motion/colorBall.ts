@@ -3,13 +3,14 @@ import type { Point } from "./types.ts";
 export type NormalizedBounds = { left: number; top: number; right: number; bottom: number };
 export type ColorBallCandidate = { center: Point; confidence: number; pixels: number };
 
-export function detectOrangeBallPixels(
+export function detectOrangeBallPixelCandidates(
   rgba: Uint8ClampedArray,
   width: number,
   height: number,
   bounds: NormalizedBounds = { left: 0, top: 0, right: 1, bottom: 1 },
   previous: Point | null = null,
-): ColorBallCandidate | null {
+  maximumCandidates = 4,
+): ColorBallCandidate[] {
   const mask = new Uint8Array(width * height); const visited = new Uint8Array(width * height);
   const left = Math.max(0, Math.floor(bounds.left * width)); const right = Math.min(width - 1, Math.ceil(bounds.right * width));
   const top = Math.max(0, Math.floor(bounds.top * height)); const bottom = Math.min(height - 1, Math.ceil(bounds.bottom * height));
@@ -18,7 +19,7 @@ export function detectOrangeBallPixels(
     const max = Math.max(r, g, b); const min = Math.min(r, g, b);
     if (r > 55 && r > g * 1.28 && g > b * 1.02 && max - min > 28) mask[y * width + x] = 1;
   }
-  let best: ColorBallCandidate | null = null; let bestScore = -Infinity;
+  const candidates: Array<{ candidate: ColorBallCandidate; score: number }> = [];
   const queueX = new Int32Array(width * height); const queueY = new Int32Array(width * height);
   for (let sy = top; sy <= bottom; sy += 1) for (let sx = left; sx <= right; sx += 1) {
     const start = sy * width + sx; if (!mask[start] || visited[start]) continue;
@@ -38,29 +39,45 @@ export function detectOrangeBallPixels(
     const center = { x: sumX / pixels / width, y: sumY / pixels / height };
     const continuity = previous ? Math.max(0, 1 - Math.hypot(center.x - previous.x, center.y - previous.y) * 3) : 0.5;
     const sizeScore = Math.min(1, pixels / 45); const score = aspect * 0.3 + fill * 0.25 + continuity * 0.3 + sizeScore * 0.15;
-    if (score > bestScore) { bestScore = score; best = { center, confidence: Math.min(0.72, Math.max(0.25, score * 0.72)), pixels }; }
+    candidates.push({ candidate: { center, confidence: Math.min(0.72, Math.max(0.12, score * 0.72)), pixels }, score });
   }
-  return best;
+  return candidates.sort((a, b) => b.score - a.score || b.candidate.pixels - a.candidate.pixels)
+    .slice(0, Math.max(0, maximumCandidates)).map(({ candidate }) => candidate);
 }
 
-export function detectMovingBallPixels(
+export function detectOrangeBallPixels(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  bounds: NormalizedBounds = { left: 0, top: 0, right: 1, bottom: 1 },
+  previous: Point | null = null,
+): ColorBallCandidate | null {
+  return detectOrangeBallPixelCandidates(rgba, width, height, bounds, previous, 1)[0] ?? null;
+}
+
+export function detectMovingBallPixelCandidates(
   rgba: Uint8ClampedArray,
   previousRgba: Uint8ClampedArray | null,
   width: number,
   height: number,
   bounds: NormalizedBounds = { left: 0, top: 0, right: 1, bottom: 1 },
   previous: Point | null = null,
-): ColorBallCandidate | null {
-  if (!previousRgba || previousRgba.length !== rgba.length) return null;
+  maximumCandidates = 5,
+  olderRgba: Uint8ClampedArray | null = null,
+): ColorBallCandidate[] {
+  if (!previousRgba || previousRgba.length !== rgba.length) return [];
   const mask = new Uint8Array(width * height); const visited = new Uint8Array(width * height);
   const left = Math.max(0, Math.floor(bounds.left * width)); const right = Math.min(width - 1, Math.ceil(bounds.right * width));
   const top = Math.max(0, Math.floor(bounds.top * height)); const bottom = Math.min(height - 1, Math.ceil(bounds.bottom * height));
   for (let y = top; y <= bottom; y += 1) for (let x = left; x <= right; x += 1) {
     const offset = (y * width + x) * 4; const r = rgba[offset]; const g = rgba[offset + 1]; const b = rgba[offset + 2];
     const difference = (Math.abs(r - previousRgba[offset]) + Math.abs(g - previousRgba[offset + 1]) + Math.abs(b - previousRgba[offset + 2])) / 3;
-    if (difference > 22) mask[y * width + x] = 1;
+    const olderDifference = olderRgba && olderRgba.length === rgba.length
+      ? (Math.abs(r - olderRgba[offset]) + Math.abs(g - olderRgba[offset + 1]) + Math.abs(b - olderRgba[offset + 2])) / 3
+      : difference;
+    if (difference > 22 && olderDifference > 18) mask[y * width + x] = 1;
   }
-  let best: ColorBallCandidate | null = null; let bestScore = -Infinity;
+  const candidates: Array<{ candidate: ColorBallCandidate; score: number }> = [];
   const queueX = new Int32Array(width * height); const queueY = new Int32Array(width * height);
   for (let sy = top; sy <= bottom; sy += 1) for (let sx = left; sx <= right; sx += 1) {
     const start = sy * width + sx; if (!mask[start] || visited[start]) continue;
@@ -86,8 +103,21 @@ export function detectMovingBallPixels(
       borderLuminance += rgba[offset] * 0.299 + rgba[offset + 1] * 0.587 + rgba[offset + 2] * 0.114; borderPixels += 1;
     }
     const contrast = borderPixels ? Math.min(1, Math.abs(sumLuminance / pixels - borderLuminance / borderPixels) / 80) : 0;
-    const sizeScore = Math.min(1, pixels / 35); const score = aspect * 0.22 + fill * 0.15 + continuity * 0.23 + sizeScore * 0.12 + contrast * 0.28;
-    if (score > bestScore) { bestScore = score; best = { center, confidence: Math.min(0.68, Math.max(0.25, score * 0.7)), pixels }; }
+    const sizeScore = Math.exp(-0.5 * (Math.log(pixels / 70) / 1.1) ** 2);
+    const score = aspect * 0.2 + fill * 0.12 + continuity * 0.2 + sizeScore * 0.24 + contrast * 0.24;
+    candidates.push({ candidate: { center, confidence: Math.min(0.68, Math.max(0.1, score * 0.7)), pixels }, score });
   }
-  return best;
+  return candidates.sort((a, b) => b.score - a.score || b.candidate.pixels - a.candidate.pixels)
+    .slice(0, Math.max(0, maximumCandidates)).map(({ candidate }) => candidate);
+}
+
+export function detectMovingBallPixels(
+  rgba: Uint8ClampedArray,
+  previousRgba: Uint8ClampedArray | null,
+  width: number,
+  height: number,
+  bounds: NormalizedBounds = { left: 0, top: 0, right: 1, bottom: 1 },
+  previous: Point | null = null,
+): ColorBallCandidate | null {
+  return detectMovingBallPixelCandidates(rgba, previousRgba, width, height, bounds, previous, 1)[0] ?? null;
 }

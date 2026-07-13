@@ -3,24 +3,184 @@
   "toleranceMs": 300,
   "clips": [
     {
-      "id": "behind-back-01-000",
-      "sourceId": "behind-back-01",
-      "segmentId": "000",
-      "cohort": "controlled-frontal-2026-07",
-      "split": "calibration",
-      "video": "local/videos/behind-back-01/behind-back-01-000.mp4",
-      "observations": "observations/behind-back-01-000.json",
-      "expected": [{ "move": "behind-the-back", "startMs": 1200, "endMs": 1800 }]
+      "id": "behind-back-01-000", "sourceId": "behind-back-01", "segmentId": "000", "cohort": "controlled-frontal-2026-07", "split": "calibration",
+      "video": "local/videos/behind-back-01/behind-back-01-000.mp4", "observations": "observations/behind-back-01-000.json",
+      "expected": [
+        { "move": "behind-the-back", "startMs": 4900, "endMs": 5600 },
+        { "move": "behind-the-back", "startMs": 5700, "endMs": 6100 },
+        { "move": "behind-the-back", "startMs": 6200, "endMs": 6700 },
+        { "move": "behind-the-back", "startMs": 7500, "endMs": 8100 },
+        { "move": "behind-the-back", "startMs": 18200, "endMs": 18600 }
+      ]
     },
     {
-      "id": "between-legs-01-001",
-      "sourceId": "between-legs-01",
-      "segmentId": "001",
-      "cohort": "controlled-frontal-2026-07",
-      "split": "holdout",
-      "video": "local/videos/between-legs-01/between-legs-01-001.mp4",
-      "observations": "observations/between-legs-01-001.json",
-      "expected": [{ "move": "between-the-legs", "startMs": 2200, "endMs": 2800 }]
+      "id": "behind-back-01-001", "sourceId": "behind-back-01", "segmentId": "001", "cohort": "controlled-frontal-2026-07", "split": "holdout",
+      "video": "local/videos/behind-back-01/behind-back-01-001.mp4", "observations": "observations/behind-back-01-001.json",
+      "expected": [
+        { "move": "behind-the-back", "startMs": 1200, "endMs": 1600 },
+        { "move": "behind-the-back", "startMs": 2700, "endMs": 3000 },
+        { "move": "behind-the-back", "startMs": 4100, "endMs": 4400 },
+        { "move": "behind-the-back", "startMs": 5800, "endMs": 6100 },
+        { "move": "behind-the-back", "startMs": 7200, "endMs": 7600 },
+        { "move": "behind-the-back", "startMs": 8700, "endMs": 9000 },
+        { "move": "behind-the-back", "startMs": 10100, "endMs": 10500 },
+        { "move": "behind-the-back", "startMs": 18000, "endMs": 18600 }
+      ]
+    },
+    {
+      "id": "behind-back-01-002", "sourceId": "behind-back-01", "segmentId": "002", "cohort": "controlled-frontal-2026-07", "split": "calibration",
+      "video": "local/videos/behind-back-01/behind-back-01-002.mp4", "observations": "observations/behind-back-01-002.json",
+      "expected": [
+        { "move": "behind-the-back", "startMs": 1000, "endMs": 1700 },
+        { "move": "behind-the-back", "startMs": 7500, "endMs": 8100 },
+        { "move": "behind-the-back", "startMs": 9100, "endMs": 9700 },
+        { "move": "behind-the-back", "startMs": 10800, "endMs": 11300 },
+        { "move": "behind-the-back", "startMs": 12200, "endMs": 12700 },
+        { "move": "behind-the-back", "startMs": 14800, "endMs": 15100 },
+        { "move": "behind-the-back", "startMs": 15400, "endMs": 15700 },
+        { "move": "behind-the-back", "startMs": 15900, "endMs": 16200 },
+        { "move": "behind-the-back", "startMs": 16400, "endMs": 16700 },
+        { "move": "behind-the-back", "startMs": 16900, "endMs": 17200 },
+        { "move": "behind-the-back", "startMs": 17400, "endMs": 17700 },
+        { "move": "behind-the-back", "startMs": 17900, "endMs": 18200 },
+        { "move": "behind-the-back", "startMs": 18400, "endMs": 18700 },
+        { "move": "behind-the-back", "startMs": 18900, "endMs": 19200 },
+        { "move": "behind-the-back", "startMs": 19400, "endMs": 19700 }
+      ]
+    },
+    {
+      "id": "behind-back-01-003", "sourceId": "behind-back-01", "segmentId": "003", "cohort": "controlled-frontal-2026-07", "split": "holdout",
+      "video": "local/videos/behind-back-01/behind-back-01-003.mp4", "observations": "observations/behind-back-01-003.json",
+      "expected": [
+        { "move": "behind-the-back", "startMs": 1000, "endMs": 1400 },
+        { "move": "behind-the-back", "startMs": 2000, "endMs": 2400 },
+        { "move": "behind-the-back", "startMs": 4900, "endMs": 5300 },
+        { "move": "behind-the-back", "startMs": 5400, "endMs": 5700 },
+        { "move": "behind-the-back", "startMs": 5800, "endMs": 6100 },
+        { "move": "behind-the-back", "startMs": 6200, "endMs": 6500 },
+        { "move": "behind-the-back", "startMs": 6600, "endMs": 6900 },
+        { "move": "behind-the-back", "startMs": 7000, "endMs": 7300 },
+        { "move": "behind-the-back", "startMs": 7400, "endMs": 7700 },
+        { "move": "behind-the-back", "startMs": 7800, "endMs": 8200 },
+        { "move": "behind-the-back", "startMs": 8300, "endMs": 8600 },
+        { "move": "behind-the-back", "startMs": 8700, "endMs": 9000 },
+        { "move": "behind-the-back", "startMs": 9100, "endMs": 9400 },
+        { "move": "behind-the-back", "startMs": 9500, "endMs": 9800 },
+        { "move": "behind-the-back", "startMs": 9900, "endMs": 10200 },
+        { "move": "behind-the-back", "startMs": 10300, "endMs": 10700 },
+        { "move": "behind-the-back", "startMs": 10800, "endMs": 11100 },
+        { "move": "behind-the-back", "startMs": 11200, "endMs": 11500 },
+        { "move": "behind-the-back", "startMs": 11600, "endMs": 12000 },
+        { "move": "behind-the-back", "startMs": 12100, "endMs": 12400 },
+        { "move": "behind-the-back", "startMs": 12500, "endMs": 12900 },
+        { "move": "behind-the-back", "startMs": 13000, "endMs": 13400 }
+      ]
+    },
+    {
+      "id": "between-legs-01-000", "sourceId": "between-legs-01", "segmentId": "000", "cohort": "controlled-frontal-2026-07", "split": "calibration",
+      "video": "local/videos/between-legs-01/between-legs-01-000.mp4", "observations": "observations/between-legs-01-000.json",
+      "expected": [
+        { "move": "between-the-legs", "startMs": 12000, "endMs": 13000 },
+        { "move": "between-the-legs", "startMs": 13300, "endMs": 14400 },
+        { "move": "between-the-legs", "startMs": 16200, "endMs": 17400 },
+        { "move": "between-the-legs", "startMs": 18000, "endMs": 18800 },
+        { "move": "between-the-legs", "startMs": 18900, "endMs": 19700 }
+      ]
+    },
+    {
+      "id": "between-legs-01-001", "sourceId": "between-legs-01", "segmentId": "001", "cohort": "controlled-frontal-2026-07", "split": "holdout",
+      "video": "local/videos/between-legs-01/between-legs-01-001.mp4", "observations": "observations/between-legs-01-001.json",
+      "expected": [
+        { "move": "between-the-legs", "startMs": 100, "endMs": 900 },
+        { "move": "between-the-legs", "startMs": 1000, "endMs": 1900 },
+        { "move": "between-the-legs", "startMs": 2000, "endMs": 2900 },
+        { "move": "between-the-legs", "startMs": 3000, "endMs": 3900 },
+        { "move": "between-the-legs", "startMs": 3900, "endMs": 4500 },
+        { "move": "between-the-legs", "startMs": 4500, "endMs": 5400 },
+        { "move": "between-the-legs", "startMs": 5400, "endMs": 6400 },
+        { "move": "between-the-legs", "startMs": 6400, "endMs": 6900 },
+        { "move": "between-the-legs", "startMs": 6900, "endMs": 7800 },
+        { "move": "between-the-legs", "startMs": 7900, "endMs": 8400 },
+        { "move": "between-the-legs", "startMs": 8400, "endMs": 8900 },
+        { "move": "between-the-legs", "startMs": 11300, "endMs": 12000 },
+        { "move": "between-the-legs", "startMs": 12000, "endMs": 12600 },
+        { "move": "between-the-legs", "startMs": 12600, "endMs": 12900 },
+        { "move": "between-the-legs", "startMs": 12900, "endMs": 13700 },
+        { "move": "between-the-legs", "startMs": 13700, "endMs": 14000 },
+        { "move": "between-the-legs", "startMs": 14000, "endMs": 14500 },
+        { "move": "between-the-legs", "startMs": 14800, "endMs": 15400 },
+        { "move": "between-the-legs", "startMs": 15400, "endMs": 16000 },
+        { "move": "between-the-legs", "startMs": 16000, "endMs": 16500 },
+        { "move": "between-the-legs", "startMs": 16500, "endMs": 17000 },
+        { "move": "between-the-legs", "startMs": 17000, "endMs": 17700 },
+        { "move": "between-the-legs", "startMs": 17700, "endMs": 18200 },
+        { "move": "between-the-legs", "startMs": 18200, "endMs": 18900 }
+      ]
+    },
+    {
+      "id": "between-legs-01-002", "sourceId": "between-legs-01", "segmentId": "002", "cohort": "controlled-frontal-2026-07", "split": "calibration",
+      "video": "local/videos/between-legs-01/between-legs-01-002.mp4", "observations": "observations/between-legs-01-002.json",
+      "expected": [
+        { "move": "between-the-legs", "startMs": 7000, "endMs": 7900 },
+        { "move": "between-the-legs", "startMs": 11900, "endMs": 12400 },
+        { "move": "between-the-legs", "startMs": 12500, "endMs": 12900 },
+        { "move": "between-the-legs", "startMs": 12900, "endMs": 13400 },
+        { "move": "between-the-legs", "startMs": 13400, "endMs": 13900 },
+        { "move": "between-the-legs", "startMs": 13900, "endMs": 14400 },
+        { "move": "between-the-legs", "startMs": 14400, "endMs": 14900 },
+        { "move": "between-the-legs", "startMs": 15000, "endMs": 15400 },
+        { "move": "between-the-legs", "startMs": 15400, "endMs": 15900 },
+        { "move": "between-the-legs", "startMs": 15900, "endMs": 16300 },
+        { "move": "between-the-legs", "startMs": 16300, "endMs": 16600 },
+        { "move": "between-the-legs", "startMs": 17000, "endMs": 17400 },
+        { "move": "between-the-legs", "startMs": 17500, "endMs": 17900 },
+        { "move": "between-the-legs", "startMs": 17900, "endMs": 18400 },
+        { "move": "between-the-legs", "startMs": 18400, "endMs": 18900 },
+        { "move": "between-the-legs", "startMs": 18900, "endMs": 19300 },
+        { "move": "between-the-legs", "startMs": 19300, "endMs": 19900 }
+      ]
+    },
+    {
+      "id": "between-legs-01-003", "sourceId": "between-legs-01", "segmentId": "003", "cohort": "controlled-frontal-2026-07", "split": "holdout",
+      "video": "local/videos/between-legs-01/between-legs-01-003.mp4", "observations": "observations/between-legs-01-003.json",
+      "expected": [
+        { "move": "between-the-legs", "startMs": 200, "endMs": 600 },
+        { "move": "between-the-legs", "startMs": 1400, "endMs": 1900 },
+        { "move": "between-the-legs", "startMs": 4400, "endMs": 4900 },
+        { "move": "between-the-legs", "startMs": 8000, "endMs": 8500 },
+        { "move": "between-the-legs", "startMs": 9000, "endMs": 9500 },
+        { "move": "between-the-legs", "startMs": 9800, "endMs": 10200 },
+        { "move": "between-the-legs", "startMs": 10600, "endMs": 11200 },
+        { "move": "between-the-legs", "startMs": 11500, "endMs": 12000 },
+        { "move": "between-the-legs", "startMs": 12500, "endMs": 12900 },
+        { "move": "between-the-legs", "startMs": 13100, "endMs": 13700 },
+        { "move": "between-the-legs", "startMs": 14100, "endMs": 14700 },
+        { "move": "between-the-legs", "startMs": 15000, "endMs": 15400 },
+        { "move": "between-the-legs", "startMs": 15600, "endMs": 16000 },
+        { "move": "between-the-legs", "startMs": 16300, "endMs": 16900 },
+        { "move": "between-the-legs", "startMs": 17300, "endMs": 17800 },
+        { "move": "between-the-legs", "startMs": 18000, "endMs": 18700 },
+        { "move": "between-the-legs", "startMs": 19100, "endMs": 19700 }
+      ]
+    },
+    {
+      "id": "between-legs-01-004", "sourceId": "between-legs-01", "segmentId": "004", "cohort": "controlled-frontal-2026-07", "split": "calibration",
+      "video": "local/videos/between-legs-01/between-legs-01-004.mp4", "observations": "observations/between-legs-01-004.json",
+      "expected": [
+        { "move": "between-the-legs", "startMs": 0, "endMs": 400 },
+        { "move": "between-the-legs", "startMs": 600, "endMs": 1200 },
+        { "move": "between-the-legs", "startMs": 1200, "endMs": 1800 },
+        { "move": "between-the-legs", "startMs": 1900, "endMs": 2400 },
+        { "move": "between-the-legs", "startMs": 2500, "endMs": 2900 },
+        { "move": "between-the-legs", "startMs": 3000, "endMs": 3500 },
+        { "move": "between-the-legs", "startMs": 3600, "endMs": 4100 },
+        { "move": "between-the-legs", "startMs": 4100, "endMs": 4700 },
+        { "move": "between-the-legs", "startMs": 4700, "endMs": 5300 },
+        { "move": "between-the-legs", "startMs": 5400, "endMs": 5900 },
+        { "move": "between-the-legs", "startMs": 5900, "endMs": 6200 },
+        { "move": "between-the-legs", "startMs": 6200, "endMs": 6600 },
+        { "move": "between-the-legs", "startMs": 6600, "endMs": 7000 }
+      ]
     }
   ]
 }

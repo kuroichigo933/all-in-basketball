@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { FilesetResolver, ObjectDetector, PoseLandmarker } from "@mediapipe/tasks-vision";
 import { detectMoves, summarizeAnalysis } from "@/lib/motion/detectMoves";
 import { trackBallContinuity } from "@/lib/motion/trackBall";
@@ -8,15 +8,19 @@ import type { AnalysisSummary, MotionObservation, Point } from "@/lib/motion/typ
 import type { MoveName } from "@/lib/motion/types";
 import type { ExpectedMove } from "@/lib/motion/evaluate";
 import { ALL_MOVE_NAMES } from "@/lib/motion/validation";
-import { detectMovingBallPixels, detectOrangeBallPixels } from "@/lib/motion/colorBall";
+import { detectMovingBallPixelCandidates, detectOrangeBallPixelCandidates } from "@/lib/motion/colorBall";
 import { OnlineBallTracker, type BallMeasurement } from "@/lib/motion/onlineBallTracker";
+import { selectCompletedLiveMove, type LiveMoveCursor } from "@/lib/motion/liveMoveEvents";
+import { summarizeSampling, type SamplingDiagnostics } from "@/lib/motion/sampling";
+import { applyPoseBallPrior } from "@/lib/motion/ballCandidate";
+import { mapPointFromCrop, selectPoseBallCrop } from "@/lib/motion/poseCrop";
+import { evaluateBallIdentity, type BallIdentityLabel } from "@/lib/motion/evaluateBall";
 
 const SAMPLE_INTERVAL_MS = 100;
 const MAX_CLIP_SECONDS = 60;
 const LIVE_WINDOW_MS = 4_000;
-const EVENT_COOLDOWN_MS = 900;
-const LIVE_MOVE_NAMES = new Set<MoveName>(["crossover", "between-the-legs", "behind-the-back"]);
 const landmark = (points: Point[], index: number): Point => points[index] ?? { x: 0, y: 0, visibility: 0 };
+const EMPTY_TRACKING = { pose: 0, ball: 0, samples: 0, measuredBallCoverage: 0, trackedBallCoverage: 0, inferenceFps: 0, maximumGapMs: 0 };
 
 export default function AITracker() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -29,28 +33,41 @@ export default function AITracker() {
   const liveStartedRef = useRef(0);
   const lastInferenceRef = useRef(0);
   const liveObservationsRef = useRef<MotionObservation[]>([]);
-  const lastEventRef = useRef<{ move: MoveName; atMs: number } | null>(null);
+  const liveSessionObservationsRef = useRef<MotionObservation[]>([]);
+  const lastEventRef = useRef<LiveMoveCursor | null>(null);
+  const debugOverlayRef = useRef(true);
   const colorCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const objectCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const previousBallRef = useRef<Point | null>(null);
   const previousFramePixelsRef = useRef<Uint8ClampedArray | null>(null);
+  const olderFramePixelsRef = useRef<Uint8ClampedArray | null>(null);
   const onlineBallTrackerRef = useRef(new OnlineBallTracker());
+  const liveMetricsRef = useRef({ samples: 0, measuredBallSamples: 0, trackedBallSamples: 0, lastTimeMs: 0, maximumGapMs: 0 });
   const [mode, setMode] = useState<"live" | "upload">("live");
   const [live, setLive] = useState(false);
   const [debugOverlay, setDebugOverlay] = useState(true);
   const [liveEvents, setLiveEvents] = useState<Array<{ move: MoveName; confidence: number; timeMs: number }>>([]);
   const [repetitions, setRepetitions] = useState<Partial<Record<MoveName, number>>>({});
-  const [tracking, setTracking] = useState({ pose: 0, ball: 0 });
+  const [tracking, setTracking] = useState(EMPTY_TRACKING);
   const [cameraExpanded, setCameraExpanded] = useState(false);
   const [status, setStatus] = useState("Choose a short MP4, WebM, or MOV clip.");
   const [running, setRunning] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<AnalysisSummary | null>(null);
+  const [sampling, setSampling] = useState<SamplingDiagnostics | null>(null);
   const [exportData, setExportData] = useState<MotionObservation[]>([]);
   const [labels, setLabels] = useState<ExpectedMove[]>([]);
   const [labelMove, setLabelMove] = useState<MoveName>("behind-the-back");
   const [labelStartMs, setLabelStartMs] = useState<number | null>(null);
+  const [ballLabels, setBallLabels] = useState<BallIdentityLabel[]>([]);
+  const [drawingBallBox, setDrawingBallBox] = useState(false);
+  const [ballDrag, setBallDrag] = useState<{ start: Point; current: Point } | null>(null);
   const [clipId, setClipId] = useState("");
+
+  const ballIdentity = useMemo(() => ballLabels.length && exportData.length
+    ? evaluateBallIdentity(ballLabels, exportData, { timestampToleranceMs: 60 })
+    : null, [ballLabels, exportData]);
 
   useEffect(() => () => {
     cancelledRef.current = true;
@@ -74,7 +91,7 @@ export default function AITracker() {
       try {
         const objects = await ObjectDetector.createFromOptions(vision, {
           baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite", delegate },
-          scoreThreshold: 0.25, runningMode: "VIDEO",
+          scoreThreshold: 0.1, categoryAllowlist: ["sports ball"], maxResults: 3, runningMode: "VIDEO",
         });
         return { pose, objects };
       } catch (error) { pose.close(); throw error; }
@@ -86,6 +103,14 @@ export default function AITracker() {
       setStatus("GPU unavailable; loading CPU models...");
       const models = await create("CPU"); poseRef.current = models.pose; objectsRef.current = models.objects;
     }
+  }
+
+  function warmModels() {
+    const canvas = document.createElement("canvas"); canvas.width = 320; canvas.height = 180;
+    const context = canvas.getContext("2d"); context?.fillRect(0, 0, canvas.width, canvas.height);
+    const timestamp = performance.now();
+    poseRef.current!.detectForVideo(canvas, timestamp);
+    objectsRef.current!.detectForVideo(canvas, timestamp);
   }
 
   function seek(video: HTMLVideoElement, seconds: number) {
@@ -108,11 +133,11 @@ export default function AITracker() {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) return;
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) { canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
     const context = canvas.getContext("2d");
     if (!context) return;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    if (!debugOverlay) return;
+    if (!debugOverlayRef.current) return;
     if (trajectory.length > 1) {
       context.strokeStyle = "#facc15"; context.lineWidth = 3; context.beginPath();
       trajectory.forEach((point, index) => index ? context.lineTo(point.x * canvas.width, point.y * canvas.height) : context.moveTo(point.x * canvas.width, point.y * canvas.height));
@@ -128,10 +153,11 @@ export default function AITracker() {
     }
   }
 
-  function detectVisualBall(video: HTMLVideoElement, points: Point[]) {
+  function detectVisualBalls(video: HTMLVideoElement, points: Point[]): BallMeasurement[] {
     const canvas = colorCanvasRef.current ?? document.createElement("canvas"); colorCanvasRef.current = canvas;
-    canvas.width = 320; canvas.height = Math.max(1, Math.round(320 * video.videoHeight / video.videoWidth));
-    const context = canvas.getContext("2d", { willReadFrequently: true }); if (!context) return null;
+    const targetWidth = 320; const targetHeight = Math.max(1, Math.round(targetWidth * video.videoHeight / video.videoWidth));
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) { canvas.width = targetWidth; canvas.height = targetHeight; }
+    const context = canvas.getContext("2d", { willReadFrequently: true }); if (!context) return [];
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     const visible = points.filter((point) => (point.visibility ?? 1) >= 0.35);
     const bounds = visible.length ? {
@@ -141,11 +167,48 @@ export default function AITracker() {
       bottom: Math.min(1, Math.max(...visible.map((point) => point.y)) + 0.12),
     } : undefined;
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    const orange = detectOrangeBallPixels(pixels, canvas.width, canvas.height, bounds, previousBallRef.current);
-    const moving = detectMovingBallPixels(pixels, previousFramePixelsRef.current, canvas.width, canvas.height, bounds, previousBallRef.current);
-    previousFramePixelsRef.current = pixels.slice();
-    if (moving) return { ...moving, source: "motion" as const };
-    return orange ? { ...orange, source: "color" as const } : null;
+    const orange = detectOrangeBallPixelCandidates(pixels, canvas.width, canvas.height, bounds, previousBallRef.current);
+    const moving = detectMovingBallPixelCandidates(pixels, previousFramePixelsRef.current, canvas.width, canvas.height, bounds, previousBallRef.current, 8, olderFramePixelsRef.current);
+    olderFramePixelsRef.current = previousFramePixelsRef.current;
+    previousFramePixelsRef.current = pixels;
+    return [
+      ...orange.map((candidate) => ({ point: candidate.center, confidence: candidate.confidence, source: "color" as const })),
+      ...moving.map((candidate) => ({ point: candidate.center, confidence: candidate.confidence, source: "motion" as const })),
+    ].map((measurement) => applyPoseBallPrior(measurement, points));
+  }
+
+  function inferObservation(video: HTMLVideoElement, timeMs: number, inferenceTimestamp: number) {
+    const poseResult = poseRef.current!.detectForVideo(video, inferenceTimestamp);
+    const points = (poseResult.landmarks[0] ?? []) as Point[];
+    const crop = selectPoseBallCrop(points, video.videoWidth, video.videoHeight);
+    let objectInput: HTMLVideoElement | HTMLCanvasElement = video;
+    if (crop) {
+      const canvas = objectCanvasRef.current ?? document.createElement("canvas"); objectCanvasRef.current = canvas;
+      if (canvas.width !== 320 || canvas.height !== 320) { canvas.width = 320; canvas.height = 320; }
+      const context = canvas.getContext("2d");
+      context?.drawImage(video, crop.x * video.videoWidth, crop.y * video.videoHeight, crop.width * video.videoWidth, crop.height * video.videoHeight, 0, 0, canvas.width, canvas.height);
+      if (context) objectInput = canvas;
+    }
+    const objectResult = objectsRef.current!.detectForVideo(objectInput, inferenceTimestamp);
+    const modelMeasurements: BallMeasurement[] = objectResult.detections
+      .filter((item) => item.categories[0]?.categoryName === "sports ball" && item.boundingBox)
+      .sort((a, b) => (b.categories[0]?.score ?? 0) - (a.categories[0]?.score ?? 0))
+      .slice(0, 3)
+      .map((detection) => {
+        const box = detection.boundingBox!;
+        const inputWidth = crop ? 320 : video.videoWidth; const inputHeight = crop ? 320 : video.videoHeight;
+        const inputPoint = { x: (box.originX + box.width / 2) / inputWidth, y: (box.originY + box.height / 2) / inputHeight };
+        return { point: crop ? mapPointFromCrop(inputPoint, crop) : inputPoint, confidence: detection.categories[0]?.score ?? 0, source: "detected" as const };
+      });
+    const poseConfidence = points.length ? points.reduce((sum, point) => sum + (point.visibility ?? 1), 0) / points.length : 0;
+    const measurements = detectVisualBalls(video, points);
+    measurements.push(...modelMeasurements);
+    const ballTrack = onlineBallTrackerRef.current.update(timeMs, measurements); const ball = ballTrack?.point ?? null;
+    const ballConfidence = ballTrack?.confidence ?? 0; previousBallRef.current = ball;
+    const observation: MotionObservation = { timeMs, poseConfidence, ballConfidence, ball, ballSource: ballTrack?.source ?? "missing", ballMeasured: Boolean(ballTrack && !ballTrack.predicted), ballMeasurement: ballTrack?.measurementPoint,
+      leftShoulder: landmark(points, 11), rightShoulder: landmark(points, 12), leftWrist: landmark(points, 15), rightWrist: landmark(points, 16),
+      leftHip: landmark(points, 23), rightHip: landmark(points, 24), leftKnee: landmark(points, 25), rightKnee: landmark(points, 26) };
+    return { observation, points };
   }
 
   function stopLiveCamera(message = "Camera stopped.") {
@@ -155,20 +218,65 @@ export default function AITracker() {
     const stream = video?.srcObject as MediaStream | null;
     stream?.getTracks().forEach((track) => track.stop());
     if (video) video.srcObject = null;
-    setLive(false); setCameraExpanded(false); setTracking({ pose: 0, ball: 0 }); setStatus(message);
+    setLive(false); setCameraExpanded(false); setTracking(EMPTY_TRACKING); setStatus(message);
   }
 
-  function lockBallFromPointer(event: ReactPointerEvent<HTMLDivElement>) {
-    if (mode !== "live" || !live || !videoRef.current) return;
+  function pointFromPreview(event: ReactPointerEvent<HTMLDivElement>, mirrored: boolean) {
+    if (!videoRef.current) return null;
     const video = videoRef.current; const rect = event.currentTarget.getBoundingClientRect();
     const scale = Math.min(rect.width / video.videoWidth, rect.height / video.videoHeight);
     const renderedWidth = video.videoWidth * scale; const renderedHeight = video.videoHeight * scale;
     const offsetX = (rect.width - renderedWidth) / 2; const offsetY = (rect.height - renderedHeight) / 2;
     const displayX = (event.clientX - rect.left - offsetX) / renderedWidth; const displayY = (event.clientY - rect.top - offsetY) / renderedHeight;
-    if (displayX < 0 || displayX > 1 || displayY < 0 || displayY > 1) return;
-    const point = { x: 1 - displayX, y: displayY }; const timeMs = Math.max(0, performance.now() - liveStartedRef.current);
+    if (displayX < 0 || displayX > 1 || displayY < 0 || displayY > 1) return null;
+    return { x: mirrored ? 1 - displayX : displayX, y: displayY };
+  }
+
+  function drawBallAnnotation(label: BallIdentityLabel | null) {
+    const canvas = canvasRef.current; const video = videoRef.current;
+    if (!canvas || !video) return;
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) { canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
+    const context = canvas.getContext("2d"); if (!context) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    if (!label || label.visibility === "absent") return;
+    context.strokeStyle = "#4ade80"; context.lineWidth = 4;
+    context.strokeRect(label.box.x * canvas.width, label.box.y * canvas.height, label.box.width * canvas.width, label.box.height * canvas.height);
+  }
+
+  function lockBallFromPointer(event: ReactPointerEvent<HTMLDivElement>) {
+    if (mode === "upload" && drawingBallBox) {
+      const point = pointFromPreview(event, false); if (!point) return;
+      videoRef.current?.pause(); event.currentTarget.setPointerCapture(event.pointerId);
+      setBallDrag({ start: point, current: point }); return;
+    }
+    if (mode !== "live" || !live || !videoRef.current) return;
+    const point = pointFromPreview(event, true); if (!point) return;
+    const timeMs = Math.max(0, performance.now() - liveStartedRef.current);
     onlineBallTrackerRef.current.seed(timeMs, point); previousBallRef.current = point;
     setTracking((current) => ({ ...current, ball: 0.8 })); setStatus("Ball locked. Continue dribbling.");
+  }
+
+  function updateBallDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!ballDrag) return;
+    const point = pointFromPreview(event, false); if (!point) return;
+    const next = { ...ballDrag, current: point }; setBallDrag(next);
+    drawBallAnnotation({ timeMs: 0, visibility: "visible", box: {
+      x: Math.min(next.start.x, point.x), y: Math.min(next.start.y, point.y),
+      width: Math.abs(point.x - next.start.x), height: Math.abs(point.y - next.start.y),
+    } });
+  }
+
+  function finishBallDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!ballDrag) return;
+    const point = pointFromPreview(event, false) ?? ballDrag.current;
+    const box = { x: Math.min(ballDrag.start.x, point.x), y: Math.min(ballDrag.start.y, point.y),
+      width: Math.abs(point.x - ballDrag.start.x), height: Math.abs(point.y - ballDrag.start.y) };
+    setBallDrag(null); setDrawingBallBox(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (box.width < 0.005 || box.height < 0.005) { drawBallAnnotation(null); return; }
+    const label: BallIdentityLabel = { timeMs: Math.round((videoRef.current?.currentTime ?? 0) * 1000), visibility: "visible", box };
+    setBallLabels((current) => [...current.filter((item) => item.timeMs !== label.timeMs), label].sort((a, b) => a.timeMs - b.timeMs));
+    drawBallAnnotation(label);
   }
 
   async function startLiveCamera() {
@@ -177,13 +285,16 @@ export default function AITracker() {
     setStatus("Loading vision models..."); setRunning(true);
     try {
       await initializeModels();
+      setStatus("Warming up live vision models..."); warmModels();
       setStatus("Requesting front camera access...");
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: false,
       });
       video.src = ""; video.srcObject = stream; await video.play();
+      previousBallRef.current = null; previousFramePixelsRef.current = null; olderFramePixelsRef.current = null; onlineBallTrackerRef.current.reset();
       liveStartedRef.current = performance.now(); lastInferenceRef.current = 0;
-      liveObservationsRef.current = []; lastEventRef.current = null; previousBallRef.current = null; previousFramePixelsRef.current = null; onlineBallTrackerRef.current.reset();
+      liveObservationsRef.current = []; liveSessionObservationsRef.current = []; lastEventRef.current = null; previousBallRef.current = null; previousFramePixelsRef.current = null; olderFramePixelsRef.current = null; onlineBallTrackerRef.current.reset();
+      liveMetricsRef.current = { samples: 0, measuredBallSamples: 0, trackedBallSamples: 0, lastTimeMs: 0, maximumGapMs: 0 }; setTracking(EMPTY_TRACKING);
       setLiveEvents([]); setRepetitions({}); setLive(true); setVideoReady(true);
       setStatus("Live tracking active. Keep one player and one ball in frame.");
       liveFrameRef.current = requestAnimationFrame(processLiveFrame);
@@ -193,40 +304,33 @@ export default function AITracker() {
     } finally { setRunning(false); }
   }
 
-  function processLiveFrame(now: number) {
+  function processLiveFrame(_frameTimestamp: number) {
     const video = videoRef.current;
     if (!video || !poseRef.current || !objectsRef.current || !video.srcObject) return;
+    const now = performance.now();
     if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && now - lastInferenceRef.current >= SAMPLE_INTERVAL_MS) {
       lastInferenceRef.current = now;
       try {
         const timeMs = Math.round(now - liveStartedRef.current);
-        const poseResult = poseRef.current.detectForVideo(video, now);
-        const objectResult = objectsRef.current.detectForVideo(video, now);
-        const points = (poseResult.landmarks[0] ?? []) as Point[];
-        const detection = objectResult.detections.filter((item) => item.categories[0]?.categoryName === "sports ball")
-          .sort((a, b) => (b.categories[0]?.score ?? 0) - (a.categories[0]?.score ?? 0))[0];
-        const box = detection?.boundingBox;
-        const modelBall = box ? { x: (box.originX + box.width / 2) / video.videoWidth, y: (box.originY + box.height / 2) / video.videoHeight } : null;
-        const poseConfidence = points.length ? points.reduce((sum, point) => sum + (point.visibility ?? 1), 0) / points.length : 0;
-        const visualBall = detectVisualBall(video, points); const measurements: BallMeasurement[] = [];
-        if (modelBall) measurements.push({ point: modelBall, confidence: detection.categories[0]?.score ?? 0, source: "detected" });
-        if (visualBall) measurements.push({ point: visualBall.center, confidence: visualBall.confidence, source: visualBall.source });
-        const ballTrack = onlineBallTrackerRef.current.update(timeMs, measurements); const ball = ballTrack?.point ?? null;
-        const ballConfidence = ballTrack?.confidence ?? 0; previousBallRef.current = ball;
-        const observation: MotionObservation = { timeMs, poseConfidence, ballConfidence, ball, ballSource: ballTrack?.source ?? "missing",
-          leftShoulder: landmark(points, 11), rightShoulder: landmark(points, 12), leftWrist: landmark(points, 15), rightWrist: landmark(points, 16),
-          leftHip: landmark(points, 23), rightHip: landmark(points, 24), leftKnee: landmark(points, 25), rightKnee: landmark(points, 26) };
+        const { observation, points } = inferObservation(video, timeMs, now);
+        const { ball, ballConfidence, poseConfidence } = observation;
+        liveSessionObservationsRef.current.push(observation);
         liveObservationsRef.current.push(observation);
         liveObservationsRef.current = liveObservationsRef.current.filter((item) => timeMs - item.timeMs <= LIVE_WINDOW_MS);
         const tracked = trackBallContinuity(liveObservationsRef.current);
-        const moves = detectMoves(tracked).filter((move) => LIVE_MOVE_NAMES.has(move.move));
-        const completed = moves.at(-1);
-        if (completed && completed.endMs >= timeMs - 500 && (!lastEventRef.current || timeMs - lastEventRef.current.atMs > EVENT_COOLDOWN_MS)) {
-          lastEventRef.current = { move: completed.move, atMs: timeMs };
-          setLiveEvents((events) => [{ move: completed.move, confidence: completed.confidence, timeMs }, ...events].slice(0, 8));
+        const completed = selectCompletedLiveMove(detectMoves(tracked), timeMs, lastEventRef.current);
+        if (completed) {
+          lastEventRef.current = { startMs: completed.startMs, endMs: completed.endMs, emittedAtMs: timeMs };
+          setLiveEvents((events) => [{ move: completed.move, confidence: completed.confidence, timeMs: completed.endMs }, ...events].slice(0, 8));
           setRepetitions((counts) => ({ ...counts, [completed.move]: (counts[completed.move] ?? 0) + 1 }));
         }
-        setTracking({ pose: poseConfidence, ball: ballConfidence });
+        const metrics = liveMetricsRef.current; const gapMs = metrics.samples ? timeMs - metrics.lastTimeMs : 0;
+        metrics.samples += 1; metrics.lastTimeMs = timeMs; metrics.maximumGapMs = Math.max(metrics.maximumGapMs, gapMs);
+        if (ball) metrics.trackedBallSamples += 1;
+        if (ball && observation.ballSource !== "interpolated" && observation.ballSource !== "missing") metrics.measuredBallSamples += 1;
+        setTracking({ pose: poseConfidence, ball: ballConfidence, samples: metrics.samples,
+          measuredBallCoverage: metrics.measuredBallSamples / metrics.samples, trackedBallCoverage: metrics.trackedBallSamples / metrics.samples,
+          inferenceFps: timeMs > 0 ? metrics.samples / (timeMs / 1000) : 0, maximumGapMs: metrics.maximumGapMs });
         draw(points, ball, ballConfidence, tracked.flatMap((item) => item.ball ? [item.ball] : []).slice(-20));
       } catch (error) { console.error("[AI tracker] live frame failed", error); }
     }
@@ -238,52 +342,46 @@ export default function AITracker() {
     if (!video || !video.src || !videoReady || !Number.isFinite(video.duration)) {
       setStatus("Wait for the selected video to finish loading."); return;
     }
-    cancelledRef.current = false; previousBallRef.current = null; previousFramePixelsRef.current = null; onlineBallTrackerRef.current.reset(); setRunning(true); setResult(null); setProgress(0);
+    cancelledRef.current = false; previousBallRef.current = null; previousFramePixelsRef.current = null; olderFramePixelsRef.current = null; onlineBallTrackerRef.current.reset(); setRunning(true); setResult(null); setSampling(null); setProgress(0);
     try {
       await initializeModels();
       const observations: MotionObservation[] = [];
-      let lastSampleMs = -SAMPLE_INTERVAL_MS;
-      video.currentTime = 0; video.muted = true; video.playbackRate = 4;
+      video.pause(); video.muted = true; video.playbackRate = 1;
+      const durationMs = Math.floor(video.duration * 1000);
+      let maximumFrameOffsetMs = 0;
+      setStatus("Analyzing every 100 ms frame without skipping..."); await seek(video, 0);
       await new Promise<void>((resolve, reject) => {
-        let callbackId = 0;
-        const cleanup = () => { if (callbackId) video.cancelVideoFrameCallback(callbackId); video.removeEventListener("ended", complete); video.removeEventListener("error", failed); };
-        const complete = () => { cleanup(); resolve(); };
+        let callbackId = 0; let nextSampleMs = 0;
+        const cleanup = () => { if (callbackId) video.cancelVideoFrameCallback(callbackId); video.removeEventListener("error", failed); video.removeEventListener("ended", complete); video.pause(); };
         const failed = () => { cleanup(); reject(new Error("The browser could not decode the clip.")); };
-        const processFrame = (_now: number, metadata: VideoFrameCallbackMetadata) => {
-          if (cancelledRef.current) { video.pause(); cleanup(); resolve(); return; }
-          const timeMs = Math.round(metadata.mediaTime * 1000);
-          if (timeMs - lastSampleMs >= SAMPLE_INTERVAL_MS - 2) {
-            lastSampleMs = timeMs;
-            const inferenceTimestamp = performance.now();
-            const poseResult = poseRef.current!.detectForVideo(video, inferenceTimestamp);
-            const objectResult = objectsRef.current!.detectForVideo(video, inferenceTimestamp);
-            const points = (poseResult.landmarks[0] ?? []) as Point[];
-            const detection = objectResult.detections.filter((item) => item.categories[0]?.categoryName === "sports ball")
-              .sort((a, b) => (b.categories[0]?.score ?? 0) - (a.categories[0]?.score ?? 0))[0];
-            const box = detection?.boundingBox;
-            const modelBall = box ? { x: (box.originX + box.width / 2) / video.videoWidth, y: (box.originY + box.height / 2) / video.videoHeight } : null;
-            const poseConfidence = points.length ? points.reduce((sum, point) => sum + (point.visibility ?? 1), 0) / points.length : 0;
-            const visualBall = detectVisualBall(video, points); const measurements: BallMeasurement[] = [];
-            if (modelBall) measurements.push({ point: modelBall, confidence: detection.categories[0]?.score ?? 0, source: "detected" });
-            if (visualBall) measurements.push({ point: visualBall.center, confidence: visualBall.confidence, source: visualBall.source });
-            const ballTrack = onlineBallTrackerRef.current.update(timeMs, measurements); const ball = ballTrack?.point ?? null;
-            const ballConfidence = ballTrack?.confidence ?? 0; previousBallRef.current = ball;
-            observations.push({ timeMs, poseConfidence, ballConfidence, ball, ballSource: ballTrack?.source ?? "missing",
-              leftShoulder: landmark(points, 11), rightShoulder: landmark(points, 12), leftWrist: landmark(points, 15), rightWrist: landmark(points, 16),
-              leftHip: landmark(points, 23), rightHip: landmark(points, 24), leftKnee: landmark(points, 25), rightKnee: landmark(points, 26) });
-            draw(points, ball, ballConfidence); setProgress(metadata.mediaTime / video.duration);
+        const complete = () => {
+          if (!cancelledRef.current && nextSampleMs <= durationMs) {
+            const mediaTimeMs = video.currentTime * 1000; maximumFrameOffsetMs = Math.max(maximumFrameOffsetMs, Math.abs(mediaTimeMs - nextSampleMs));
+            const { observation, points } = inferObservation(video, nextSampleMs, performance.now()); observations.push(observation);
+            draw(points, observation.ball, observation.ballConfidence); setProgress(durationMs ? nextSampleMs / durationMs : 1);
           }
-          callbackId = video.requestVideoFrameCallback(processFrame);
+          cleanup(); resolve();
         };
-        video.addEventListener("ended", complete, { once: true }); video.addEventListener("error", failed, { once: true });
-        callbackId = video.requestVideoFrameCallback(processFrame);
-        video.play().catch(reject);
+        const processFrame = (_now: number, metadata: VideoFrameCallbackMetadata) => {
+          if (cancelledRef.current) { cleanup(); resolve(); return; }
+          const mediaTimeMs = metadata.mediaTime * 1000;
+          if (mediaTimeMs + SAMPLE_INTERVAL_MS / 2 < nextSampleMs) { callbackId = video.requestVideoFrameCallback(processFrame); return; }
+          video.pause(); maximumFrameOffsetMs = Math.max(maximumFrameOffsetMs, Math.abs(mediaTimeMs - nextSampleMs));
+          const { observation, points } = inferObservation(video, nextSampleMs, performance.now());
+          observations.push(observation); draw(points, observation.ball, observation.ballConfidence);
+          setProgress(durationMs ? nextSampleMs / durationMs : 1); nextSampleMs += SAMPLE_INTERVAL_MS;
+          if (nextSampleMs > durationMs) { cleanup(); resolve(); return; }
+          callbackId = video.requestVideoFrameCallback(processFrame); video.play().catch(failed);
+        };
+        video.addEventListener("error", failed, { once: true }); video.addEventListener("ended", complete, { once: true });
+        callbackId = video.requestVideoFrameCallback(processFrame); video.play().catch(failed);
       });
-      video.pause(); video.playbackRate = 1;
       if (!cancelledRef.current) {
         const tracked = trackBallContinuity(observations);
         setExportData(tracked);
         setResult(summarizeAnalysis(tracked));
+        setSampling({ ...summarizeSampling(tracked, durationMs, SAMPLE_INTERVAL_MS, "paced-frame"), maximumFrameOffsetMs });
+        setProgress(1);
         setStatus("Analysis complete.");
       }
     } catch (error) {
@@ -297,16 +395,26 @@ export default function AITracker() {
     if (!file.type.startsWith("video/")) { setStatus("Please choose a supported video file."); return; }
     if (fileUrlRef.current) URL.revokeObjectURL(fileUrlRef.current);
     const url = URL.createObjectURL(file); fileUrlRef.current = url;
-    setVideoReady(false); videoRef.current.src = url; setResult(null); setExportData([]); setLabels([]); setLabelStartMs(null);
+    setVideoReady(false); videoRef.current.src = url; setResult(null); setSampling(null); setExportData([]); setLabels([]); setLabelStartMs(null); setBallLabels([]); setDrawingBallBox(false); setBallDrag(null);
     setClipId(file.name.replace(/\.[^.]+$/, "")); setProgress(0); setStatus(`Loading: ${file.name}`);
   }
 
   function downloadObservations() {
-    const payload = JSON.stringify({ schemaVersion: 2, clip: { id: clipId }, sampleIntervalMs: SAMPLE_INTERVAL_MS, observations: exportData, labels, result }, null, 2);
+    const payload = JSON.stringify({ schemaVersion: 2, clip: { id: clipId }, sampleIntervalMs: SAMPLE_INTERVAL_MS, sampling, observations: exportData, labels, ballLabels, result }, null, 2);
     const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
     const anchor = document.createElement("a");
     anchor.href = url; anchor.download = `${clipId || "basketball-analysis"}.json`; anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  function downloadLiveObservations() {
+    const tracked = trackBallContinuity(liveSessionObservationsRef.current);
+    const durationMs = tracked.at(-1)?.timeMs ?? 0;
+    const liveSampling = summarizeSampling(tracked, durationMs, SAMPLE_INTERVAL_MS, "live-throttled");
+    const payload = JSON.stringify({ schemaVersion: 2, clip: { id: "live-session" }, sampleIntervalMs: SAMPLE_INTERVAL_MS,
+      sampling: liveSampling, observations: tracked, labels: [], ballLabels: [], result: summarizeAnalysis(tracked) }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const anchor = document.createElement("a"); anchor.href = url; anchor.download = `live-session-${Date.now()}.json`; anchor.click(); URL.revokeObjectURL(url);
   }
 
   return <div className="space-y-5">
@@ -317,7 +425,8 @@ export default function AITracker() {
     {mode === "live" ? <div className="flex flex-wrap items-center gap-3">
       {!live ? <button className="btn-game" disabled={running} onClick={startLiveCamera}>{running ? "Starting..." : "Start front camera"}</button> : <button className="btn-ghost" onClick={() => stopLiveCamera()}>Stop camera</button>}
       {live && <button className="btn-ghost" onClick={() => setCameraExpanded((expanded) => !expanded)}>{cameraExpanded ? "Exit full screen" : "Full screen"}</button>}
-      <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={debugOverlay} onChange={(event) => setDebugOverlay(event.target.checked)} /> Debug overlay</label>
+      {live && tracking.samples > 0 && <button className="btn-ghost" onClick={downloadLiveObservations}>Export live observations</button>}
+      <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={debugOverlay} onChange={(event) => { debugOverlayRef.current = event.target.checked; setDebugOverlay(event.target.checked); }} /> Debug overlay</label>
       {live && <span className="text-xs text-muted">If tracking is weak, tap the ball once in the preview.</span>}
       <p className="text-sm text-muted">{status}</p>
     </div> : <div className="flex flex-wrap items-center gap-3">
@@ -327,7 +436,7 @@ export default function AITracker() {
       <p className="text-sm text-muted">{status}</p>
     </div>}
     {mode === "upload" && running && <div className="h-2 overflow-hidden rounded bg-raised"><div className="h-full bg-game transition-all" style={{ width: `${progress * 100}%` }} /></div>}
-    <div onPointerDown={lockBallFromPointer} className={`relative aspect-video overflow-hidden bg-raised ${mode === "live" && live ? "cursor-crosshair" : ""} ${cameraExpanded ? "fixed inset-0 z-[100] aspect-auto rounded-none" : "rounded-card"}`}>
+    <div onPointerDown={lockBallFromPointer} onPointerMove={updateBallDrag} onPointerUp={finishBallDrag} onPointerCancel={() => { setBallDrag(null); setDrawingBallBox(false); drawBallAnnotation(null); }} className={`relative aspect-video overflow-hidden bg-raised ${(mode === "live" && live) || (mode === "upload" && drawingBallBox) ? "cursor-crosshair" : ""} ${cameraExpanded ? "fixed inset-0 z-[100] aspect-auto rounded-none" : "rounded-card"}`}>
       <video ref={videoRef} controls={mode === "upload"} playsInline disablePictureInPicture preload="auto" onCanPlay={(event) => {
         if (mode === "live") { setVideoReady(true); return; }
         if (event.currentTarget.duration > MAX_CLIP_SECONDS) {
@@ -339,7 +448,7 @@ export default function AITracker() {
       {cameraExpanded && <button className="btn-ghost absolute right-4 top-4 z-20 bg-asphalt/90" onPointerDown={(event) => event.stopPropagation()} onClick={() => setCameraExpanded(false)}>Exit full screen</button>}
     </div>
     {mode === "live" && <section className="grid gap-4 md:grid-cols-2">
-      <div className="rounded-card border border-line bg-raised p-4"><h2 className="display text-lg">Tracking confidence</h2><div className="mt-3 flex gap-6 text-sm"><span>Player <strong>{Math.round(tracking.pose * 100)}%</strong></span><span>Ball <strong>{Math.round(tracking.ball * 100)}%</strong></span><span>Window <strong>4s</strong></span><span>Inference <strong>10 FPS</strong></span></div></div>
+      <div className="rounded-card border border-line bg-raised p-4"><h2 className="display text-lg">Tracking confidence</h2><div className="mt-3 flex flex-wrap gap-6 text-sm"><span>Player confidence <strong>{Math.round(tracking.pose * 100)}%</strong></span><span>Ball confidence <strong>{Math.round(tracking.ball * 100)}%</strong></span><span>Measured ball frames <strong>{Math.round(tracking.measuredBallCoverage * 100)}%</strong></span><span>Tracked ball frames <strong>{Math.round(tracking.trackedBallCoverage * 100)}%</strong></span><span>Observed inference <strong>{tracking.inferenceFps.toFixed(1)} FPS</strong></span><span>Max gap <strong>{tracking.maximumGapMs} ms</strong></span><span>Samples <strong>{tracking.samples}</strong></span><span>Window <strong>4s</strong></span></div></div>
       <div className="rounded-card border border-line bg-raised p-4"><h2 className="display text-lg">Repetitions</h2><div className="mt-3 flex flex-wrap gap-4 text-sm">{(["crossover", "between-the-legs", "behind-the-back"] as MoveName[]).map((move) => <span key={move} className="capitalize">{move.replaceAll("-", " ")} <strong>{repetitions[move] ?? 0}</strong></span>)}</div></div>
       <div className="rounded-card border border-line bg-raised p-4 md:col-span-2"><h2 className="display text-lg">Recent moves</h2>{liveEvents.length ? <ul className="mt-3 space-y-2">{liveEvents.map((event, index) => <li key={`${event.timeMs}-${index}`} className="flex gap-3 text-sm"><strong className="capitalize">{event.move.replaceAll("-", " ")}</strong><span>{Math.round(event.confidence * 100)}%</span><span className="text-muted">{(event.timeMs / 1000).toFixed(1)}s</span></li>)}</ul> : <p className="mt-2 text-sm text-muted">No completed move detected yet.</p>}</div>
     </section>}
@@ -362,9 +471,33 @@ export default function AITracker() {
         <span>to</span><input className="input w-28" type="number" step="0.01" value={label.endMs / 1000} onChange={(event) => setLabels((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, endMs: Math.round(Number(event.target.value) * 1000) } : item))} />
         <button className="text-game" onClick={() => setLabels((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Delete</button>
       </li>)}</ul>}
+      <div className="mt-5 border-t border-line pt-4">
+        <h3 className="font-semibold">Independent ball identity labels</h3>
+        <p className="mt-1 text-sm text-muted">Pause on a frame and draw a tight box around the basketball. Include some frames where no ball is visible. These labels are never created from tracker output.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button className="btn-ghost" onClick={() => { const video = videoRef.current; if (!video) return; video.pause(); video.currentTime = Math.max(0, video.currentTime - 0.1); drawBallAnnotation(null); }}>-0.1s</button>
+          <button className="btn-ghost" onClick={() => { const video = videoRef.current; if (!video) return; video.pause(); video.currentTime = Math.min(video.duration || 0, video.currentTime + 0.1); drawBallAnnotation(null); }}>+0.1s</button>
+          <button className={drawingBallBox ? "btn-game" : "btn-ghost"} onClick={() => { videoRef.current?.pause(); setDrawingBallBox((current) => !current); setBallDrag(null); drawBallAnnotation(null); }}>{drawingBallBox ? "Drag on the ball..." : "Draw ball box"}</button>
+          <button className="btn-ghost" onClick={() => {
+            const label: BallIdentityLabel = { timeMs: Math.round((videoRef.current?.currentTime ?? 0) * 1000), visibility: "absent" };
+            setBallLabels((current) => [...current.filter((item) => item.timeMs !== label.timeMs), label].sort((a, b) => a.timeMs - b.timeMs));
+            setDrawingBallBox(false); drawBallAnnotation(null);
+          }}>No ball in frame</button>
+          <span className="text-xs text-muted">{ballLabels.length} labeled frames</span>
+        </div>
+        {ballLabels.length > 0 && <ul className="mt-3 max-h-48 space-y-2 overflow-auto">{ballLabels.map((label) => <li key={label.timeMs} className="flex flex-wrap items-center gap-3 text-sm">
+          <button className="text-game" onClick={() => { const video = videoRef.current; if (video) { video.pause(); video.currentTime = label.timeMs / 1000; } drawBallAnnotation(label); }}>{(label.timeMs / 1000).toFixed(1)}s</button>
+          <span>{label.visibility === "visible" ? "ball box" : "no ball"}</span>
+          <button className="text-game" onClick={() => { setBallLabels((current) => current.filter((item) => item.timeMs !== label.timeMs)); drawBallAnnotation(null); }}>Delete</button>
+        </li>)}</ul>}
+        {ballIdentity && <div className="mt-4 rounded border border-line p-3 text-sm">
+          <div className="flex flex-wrap gap-5"><span>Tracked identity F1 <strong>{Math.round(ballIdentity.tracked.f1 * 100)}%</strong></span><span>Precision <strong>{Math.round(ballIdentity.tracked.precision * 100)}%</strong></span><span>Recall <strong>{Math.round(ballIdentity.tracked.recall * 100)}%</strong></span><span>Median center error <strong>{ballIdentity.tracked.medianCenterErrorRadii?.toFixed(2) ?? "n/a"} radii</strong></span>{ballIdentity.raw && <span>Raw identity F1 <strong>{Math.round(ballIdentity.raw.f1 * 100)}%</strong></span>}</div>
+          {ballIdentity.warnings.map((warning) => <p key={warning} className="mt-2 text-xs text-wood">{warning}</p>)}
+        </div>}
+      </div>
     </section>}
     {mode === "upload" && result && <section className="rounded-card border border-line bg-raised p-4">
-      <div className="flex flex-wrap gap-5 text-sm"><span>Pose coverage <strong>{Math.round(result.poseCoverage * 100)}%</strong></span><span>Ball coverage <strong>{Math.round(result.ballCoverage * 100)}%</strong></span><span>Raw ball detections <strong>{Math.round(result.detectedBallCoverage * 100)}%</strong></span><span>Tracked gaps <strong>{result.interpolatedBallFrames}</strong></span><span>Samples <strong>{result.observations}</strong></span></div>
+      <div className="flex flex-wrap gap-5 text-sm"><span>Pose coverage <strong>{Math.round(result.poseCoverage * 100)}%</strong></span><span>Ball coverage <strong>{Math.round(result.ballCoverage * 100)}%</strong></span><span>Raw ball detections <strong>{Math.round(result.detectedBallCoverage * 100)}%</strong></span><span>Tracked gaps <strong>{result.interpolatedBallFrames}</strong></span><span>Samples <strong>{result.observations}</strong></span>{sampling && <><span>Sample coverage <strong>{Math.round(sampling.coverage * 100)}%</strong></span><span>Max sample gap <strong>{sampling.maximumGapMs} ms</strong></span></>}</div>
       {(result.poseCoverage < 0.7 || result.detectedBallCoverage < 0.5) && <p className="mt-3 rounded border border-wood/50 bg-wood/10 p-3 text-sm text-wood">Low observation coverage: treat detections as provisional. Try a closer crop, brighter lighting, a stationary camera, and an unobstructed full-body view.</p>}
       <button className="btn-ghost mt-4" onClick={downloadObservations}>Export observations</button>
       <h2 className="display mt-4 text-lg">Detected moves</h2>

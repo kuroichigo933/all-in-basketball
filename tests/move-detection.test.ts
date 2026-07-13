@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_MOVE_DETECTION_CONFIG, detectMoves, summarizeAnalysis } from "../lib/motion/detectMoves.ts";
-import type { MotionObservation } from "../lib/motion/types.ts";
+import { DEFAULT_MOVE_DETECTION_CONFIG, detectMoves, resolveMoveDetections, summarizeAnalysis } from "../lib/motion/detectMoves.ts";
+import type { MotionObservation, MoveDetection, MoveName } from "../lib/motion/types.ts";
 
 const frame = (timeMs: number, ballX: number, ballY = 0.62): MotionObservation => ({
   timeMs, poseConfidence: 0.9, ballConfidence: 0.85,
@@ -10,6 +10,9 @@ const frame = (timeMs: number, ballX: number, ballY = 0.62): MotionObservation =
   leftKnee: { x: 0.42, y: 0.75 }, rightKnee: { x: 0.58, y: 0.75 },
   ball: { x: ballX, y: ballY },
 });
+
+const detection = (move: MoveName, startMs: number, endMs: number, confidence: number): MoveDetection =>
+  ({ move, startMs, endMs, confidence, evidence: [] });
 
 test("detects a crossover with timestamps and evidence", () => {
   const moves = detectMoves([frame(0, 0.3), frame(250, 0.5, 0.35), frame(500, 0.7)]);
@@ -60,4 +63,84 @@ test("accepts isolated threshold configuration for dataset tuning", () => {
   assert.ok(detectMoves(observations).some((move) => move.move === "crossover"));
   const strict = { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 3 };
   assert.equal(detectMoves(observations, strict).some((move) => move.move === "crossover"), false);
+});
+
+test("abstains when one physical transfer has contradictory specific anatomy", () => {
+  const resolved = resolveMoveDetections([
+    detection("crossover", 10_500, 10_800, 0.88),
+    detection("between-the-legs", 10_667, 10_967, 0.82),
+    detection("crossover", 10_800, 11_100, 0.9),
+    detection("behind-the-back", 10_700, 11_000, 0.8),
+  ]);
+  assert.deepEqual(resolved, []);
+});
+
+test("deduplicates the same move independent of insertion order and keeps later repetitions", () => {
+  const resolved = resolveMoveDetections([
+    detection("crossover", 0, 250, 0.7),
+    detection("hesitation", 2_000, 2_500, 0.75),
+    detection("crossover", 200, 450, 0.9),
+    detection("crossover", 1_000, 1_250, 0.8),
+  ]);
+  assert.deepEqual(resolved.filter((move) => move.move === "crossover").map((move) => move.startMs), [200, 1_000]);
+});
+
+test("rejects a move window spanning a large observation gap", () => {
+  const observations = [frame(0, 0.3), frame(200, 0.5, 0.3), frame(700, 0.7)];
+  assert.deepEqual(detectMoves(observations), []);
+});
+
+test("does not classify a lateral transfer from predicted endpoints", () => {
+  const observations = [
+    { ...frame(0, 0.3), ballSource: "interpolated" as const },
+    frame(250, 0.5, 0.62),
+    frame(500, 0.7),
+  ];
+  assert.deepEqual(detectMoves(observations), []);
+});
+
+test("does not turn torso jitter into screen-space ball travel", () => {
+  const shifted = (observation: MotionObservation, amount: number): MotionObservation => ({
+    ...observation,
+    leftHip: { ...observation.leftHip, x: observation.leftHip.x + amount }, rightHip: { ...observation.rightHip, x: observation.rightHip.x + amount },
+    leftKnee: { ...observation.leftKnee, x: observation.leftKnee.x + amount }, rightKnee: { ...observation.rightKnee, x: observation.rightKnee.x + amount },
+  });
+  const observations = [shifted(frame(0, 0.5, 0.3), 0.1), frame(250, 0.5, 0.3), shifted(frame(500, 0.5, 0.3), -0.1)];
+  assert.deepEqual(detectMoves(observations), []);
+});
+
+test("uses normalized knee spread to distinguish pose-supported transfers", () => {
+  const transfer = (wideStance: boolean): MotionObservation[] => {
+    const source = { ...frame(0, 0.62, 0.62),
+      leftWrist: { x: 0.3, y: 0.55, z: -0.2, visibility: 0.95 },
+      rightWrist: { x: 0.56, y: 0.62, z: -0.2, visibility: 0.95 },
+      leftHip: { x: 0.4, y: 0.48, z: 0 }, rightHip: { x: 0.6, y: 0.48, z: 0 } };
+    const destination = { ...frame(300, 0.38, 0.62),
+      leftWrist: { x: 0.44, y: 0.62, z: 0, visibility: 0.95 },
+      rightWrist: { x: 0.7, y: 0.55, z: -0.2, visibility: 0.95 },
+      leftHip: { x: 0.4, y: 0.48, z: 0 }, rightHip: { x: 0.6, y: 0.48, z: 0 },
+      leftKnee: { x: wideStance ? 0.34 : 0.42, y: 0.75 }, rightKnee: { x: wideStance ? 0.66 : 0.58, y: 0.75 } };
+    const confirmation = { ...destination, timeMs: 450 };
+    return [source, destination, confirmation];
+  };
+  const poseOnly = { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10 };
+  assert.ok(detectMoves(transfer(true), poseOnly).some((move) => move.move === "between-the-legs"));
+  assert.ok(detectMoves(transfer(false), poseOnly).some((move) => move.move === "behind-the-back"));
+});
+
+test("does not treat the first wrist seen in the knee corridor as a handoff", () => {
+  const firstControl = { ...frame(300, 0.44, 0.62),
+    leftWrist: { x: 0.44, y: 0.62, z: 0, visibility: 0.95 },
+    rightWrist: { x: 0.7, y: 0.55, z: -0.2, visibility: 0.95 },
+    leftHip: { x: 0.4, y: 0.48, z: 0 }, rightHip: { x: 0.6, y: 0.48, z: 0 } };
+  assert.deepEqual(detectMoves([frame(0, 0.44, 0.62), firstControl], { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10 }), []);
+});
+
+test("pose-supported transfer requires measured ball evidence at the wrist switch", () => {
+  const transfer = [
+    { ...frame(0, 0.62), rightWrist: { x: 0.56, y: 0.62, visibility: 0.95 } },
+    { ...frame(300, 0.38), leftWrist: { x: 0.44, y: 0.62, visibility: 0.95 }, ballSource: "interpolated" as const },
+  ];
+  const poseOnly = { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10 };
+  assert.deepEqual(detectMoves(transfer, poseOnly), []);
 });

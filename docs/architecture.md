@@ -1,39 +1,65 @@
 # Architecture
 
-## Existing application
+## Product paths
 
-- **Frontend/orchestration:** Next.js 14 App Router, React, strict TypeScript, Tailwind.
-- **Backend:** Next server components, server actions, and API routes.
-- **Identity/storage/database:** Supabase Auth, Postgres, RLS, and private film-review storage.
-- **External services:** Stripe payments, optional Google Drive/Sheets, SMTP email, Vercel deployment.
-- **Video features:** Coach-review uploads already use Supabase. The AI analyzer is separate and processes local files in the browser.
-
-## Analysis pipeline
+The live front-camera path is the primary product. The upload path is a development and validation harness that calls the same observation, tracking, and move-detection core.
 
 ```text
-local video -> 10 fps seek/decode -> MediaPipe pose + EfficientDet
--> normalized wrists/hips/knees + ball center/confidence -> bounded gap tracking
--> temporal rule detectors -> move interval/confidence/evidence -> UI
+front camera preview (native FPS)
+            |
+       inference throttle (~10 FPS)
+            |
+pose landmarks + pose-centred ball-model crop
+            |
+generic sports-ball detections + top-K color components + top-K motion components
+            |
+pose/body distractor prior + online candidate fusion + <=500 ms prediction
+            |
+provenance-rich observations + rolling four-second history
+            |
+shared move detector + settled/deduplicated live events
+            |
+overlay, confidence, timestamp, and repetition count
 ```
 
-`app/(app)/ai-tracker/AITracker.tsx` owns browser decoding, model execution, and JSON export. `lib/motion/types.ts` is the boundary between computer vision and classification. `lib/motion/trackBall.ts`, `detectMoves.ts`, and `evaluate.ts` contain pure, testable tracking, classification, and scoring logic. No observations are persisted by the application.
+Upload analysis substitutes paced decoded frames for camera frames. It otherwise uses the same `MotionObservation`, continuity, and `detectMoves` contracts.
 
-## Live camera path
+## Browser vision pipeline
 
-The default analyzer mode requests `facingMode: "user"` and keeps camera preview, inference, rendering, and classification timing separate:
+`app/(app)/ai-tracker/AITracker.tsx` owns camera lifecycle, video decoding, model execution, overlays, annotation, and JSON export. Camera access prefers `facingMode: "user"`. Preview frame rate, inference frame rate, UI rendering, and the move-event window are intentionally separate.
 
-- Camera preview targets the device's normal 30 FPS stream.
-- MediaPipe pose and ball inference is throttled to 10 FPS.
-- Debug canvas and confidence UI update on analyzed frames only.
-- Move detection operates on a rolling four-second observation window.
+At each analyzed frame:
 
-Completed events are deduplicated with a short cooldown and update per-move repetition counts. Short ball losses are filled only when bounded by plausible detections. Upload analysis calls the same tracker and move detector.
+1. MediaPipe Pose Landmarker extracts one player's landmarks.
+2. A square, pose-centred crop retains the full player and low bounce while making a small ball larger for the generic EfficientDet `sports ball` model.
+3. Full-frame pixels produce multiple compact orange candidates and multiple three-frame, color-independent motion candidates.
+4. `applyPoseBallPrior` retains wrist-controlled and plausible low-bounce candidates while demoting shorts/body, knee/foot, below-foot, and unrelated-motion distractors. Generic-model candidates keep their model confidence.
+5. `OnlineBallTracker` scores candidate quality and proximity to its velocity prediction, limits acceleration/speed, and predicts for at most about 500 ms during temporary loss.
 
-Ball acquisition fuses three signals: the generic `sports ball` model, compact color components, and color-independent moving components. `OnlineBallTracker` scores candidates against a velocity prediction, rejects implausible jumps, and predicts through losses up to roughly 320 ms. A user can tap the ball once in the mirrored preview to seed the tracker when automatic acquisition is ambiguous.
+Every observation records the selected point, its confidence, whether it was measured, the raw measurement point, and its source (`detected`, `color`, `motion`, `interpolated`, or `missing`). Predicted points never become measured anchors.
 
-## Key decisions
+## Timing and event delivery
 
-- Retain a single Next.js deployment: the current browser MediaPipe dependency is adequate for a controlled prototype.
-- Analyze prerecorded clips rather than live camera input to match the brief and make timestamps reproducible.
-- Keep rules independent of MediaPipe objects so labeled fixtures or a future Python service can reuse the schema.
-- Report coverage and an empty result instead of filling missing ball observations.
+- Camera preview: device/native stream, normally around 30 FPS.
+- Vision inference: throttled to a 100 ms target interval, approximately 10 FPS.
+- UI/debug overlay: refreshed on analyzed frames.
+- Temporal history: four seconds.
+- Live event settling: 400 ms after the detected interval, with interval-based identity and a short emission guard to avoid duplicate counts.
+
+Only crossover, between-the-legs, and behind-the-back are emitted as live MVP events. A stance-aware pose-transfer cue uses wrist ownership, the knee corridor, and normalized knee spread as provisional evidence for between-the-legs versus behind-the-back. It is still a heuristic, not a learned move classifier.
+
+## Upload, annotation, and validation
+
+Upload analysis advances with `requestVideoFrameCallback` at paced 100 ms slots. Exports contain sample coverage, skipped slots, gap statistics, and maximum decoded-frame offset. Tuning and evaluation reject incomplete or badly spaced exports.
+
+Move-label annotation and ball-identity annotation are independent of detector output:
+
+- Move labels store exact start/end intervals and can be edited or deleted while raw detections remain visible for comparison.
+- Ball labels store a tight normalized box at a paused frame or explicitly record that no ball is visible.
+- Exports preserve labels and predictions as separate fields.
+
+`lib/motion/` contains pure tracking, move detection, sampling validation, event evaluation, and ball-identity evaluation. `scripts/tune-validation.ts` reads calibration clips only. `scripts/evaluate-validation.ts` reports controlled and five-class gates by split. `scripts/evaluate-ball-validation.ts` reports tracked and, when provenance is complete, raw-measurement identity metrics.
+
+## Deployment boundary
+
+The current implementation performs inference locally in the browser using MediaPipe Tasks. The live UI and normalized observation contract are designed so a future basketball-specific browser model or sampled-frame server service can replace the object detector without changing the camera experience. Full uncompressed 30 FPS server streaming is not part of the current design.

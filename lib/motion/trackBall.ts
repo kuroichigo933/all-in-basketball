@@ -22,12 +22,14 @@ export function trackBallContinuity(
   const confidenceDecay = options.confidenceDecay ?? 0.7;
   const tracked: MotionObservation[] = observations.map((observation) => ({
     ...observation,
-    ballSource: observation.ball ? "detected" as const : "missing" as const,
+    ballSource: observation.ball ? (observation.ballSource ?? "detected") : "missing",
   }));
 
   let previousDetected = -1;
   for (let index = 0; index < tracked.length; index += 1) {
-    if (!tracked[index].ball) continue;
+    const observation = tracked[index];
+    const isMeasured = observation.ball && observation.ballSource !== "interpolated" && observation.ballSource !== "missing";
+    if (!isMeasured) continue;
     if (previousDetected >= 0 && index - previousDetected > 1) {
       const before = tracked[previousDetected];
       const after = tracked[index];
@@ -45,6 +47,7 @@ export function trackBallContinuity(
             },
             ballConfidence: Math.min(before.ballConfidence, after.ballConfidence) * confidenceDecay,
             ballSource: "interpolated",
+            ballMeasured: false,
           };
         }
       }

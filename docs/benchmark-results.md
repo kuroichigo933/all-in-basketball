@@ -1,43 +1,64 @@
 # Benchmark Results
 
-## Current baseline
+## Real move-validation cohort
 
-No labeled real test clips existed in the repository on 2026-07-09. Accuracy numbers are therefore intentionally omitted. `npm test` validates rule behavior on deterministic synthetic observations, and `npm run benchmark` reports pure detector runtime on a 300-observation synthetic smoke fixture. Neither is an accuracy benchmark.
+Two supplied HEVC recordings were converted locally into nine browser-compatible, 20-second-or-shorter 720p30 H.264 segments: four behind-the-back and five between-the-legs. Every complete visible repetition was labeled independently of detector predictions, yielding 126 move intervals. Partial events crossing segment boundaries were excluded.
 
-## Required validation dataset
+Segments alternate chronologically between `calibration` and `holdout`. All nine observation exports passed the 100 ms cadence checks: no skipped sample slots, 100% declared sample coverage, maximum sample gap 100 ms, and maximum decoded-frame offset no greater than 33.333 ms. Short final segments contain fewer samples by duration, not dropped inference slots.
 
-Create an untracked `validation/videos/` directory and a manifest with: clip filename, expected move, event start/end seconds, camera view, lighting, and notes. Minimum useful set: three clips for each supported move plus three negative/no-move clips. Include one imperfect ball-visibility example per move.
+The latest calibration-only grid search selected a controlled two-class configuration with:
 
-Analyze each clip in `/ai-tracker`, choose **Export observations**, save the JSON under `validation/observations/`, copy `validation/manifest.example.json` to `validation/manifest.json`, and add the labels. Then run:
-
-```bash
-npm run validate:moves
-```
-
-For long HEVC sources, prepare local browser-compatible segments first:
-
-```bash
-npm run validation:prepare -- --input "D:\path\clip.mov" --id source-01 --move behind-the-back
-npm run validation:tune -- --manifest validation/manifest.json
-npm run validate:moves -- --manifest validation/manifest.json --split holdout
-```
-
-Preparation produces untracked 20-second 720p30 H.264 segments without audio. Use the analyzer's independent-label controls to mark every complete repetition; exclude partial moves crossing a boundary. Alternate chronological segments between calibration and holdout. Tuning reads calibration entries only.
-
-The controlled two-class gate requires both behind-the-back and between-the-legs labels plus at least 95% micro precision and recall on holdout. The five-class release gate remains blocked until independent holdout labels cover all five moves.
-
-The command exits successfully only when both event-level precision and recall are at least 95%.
-
-Record for every run: processed/total clips, pose coverage, ball coverage, move true positives, false positives, misses, end-to-end processing seconds, browser/device, and failure notes. Keep the manifest fixed while tuning.
-
-| Metric | Result |
+| Metric | Calibration result |
 |---|---:|
-| Real clips available | 0 |
-| Real-video accuracy | Not measured |
-| Real-video 95% gate | Blocked: labeled exports absent |
-| Prepared controlled segments | 9 (4 behind-the-back, 5 between-the-legs) |
-| Synthetic rule/tracker/evaluator cases | 12/12 passed |
-| Synthetic detector smoke runtime | 3.03 ms / 300 observations |
-| Repeatable commands | `npm test`, `npm run benchmark`, `npm run validate:moves` |
+| Real segments in complete cohort | 9 |
+| Independent move labels | 126 |
+| Calibration labels | 55 |
+| Holdout labels | 71, evaluated once |
+| Calibration precision / recall / F1 | 0.666667 / 0.545455 / 0.600000 |
+| Holdout precision / recall / F1 | 0.705882 / 0.507042 / 0.590164 |
+| Holdout between-the-legs F1 | 0.675676 |
+| Holdout behind-the-back F1 | 0.458333 |
+| Controlled 95% gate | Failed |
+| Five-class release gate | Blocked: three classes lack labeled holdout coverage |
 
-Last run: 2026-07-09 on Node 22.14.0. Runtime is machine-specific and excludes video decoding and MediaPipe inference.
+The configuration was selected from calibration only and the holdout was then evaluated exactly once. No further thresholds were selected from holdout results. Future detector work needs a new independent validation round rather than repeated feedback from these 71 labels.
+
+Run the reproducible workflow with:
+
+```bash
+npm run validation:prepare -- --input <path> --id <source-id> --move <move-name>
+npm run validation:tune -- --manifest validation/manifest.json
+npm run validate:moves -- --manifest validation/manifest.json --split calibration
+# The current holdout has already been evaluated once; do not tune against it.
+```
+
+## Ball-identity slice
+
+Coverage alone cannot show that the tracker selected the basketball rather than a hand, shorts, knee, foot, or moving shadow. The upload analyzer therefore supports independent tight ball boxes and explicit no-ball labels, and `validation:ball` measures localization in annotated ball radii.
+
+On one fixed seven-frame visible-ball slice, the tracked-identity result changed as follows:
+
+| Metric | Earlier tracker | Current tracker |
+|---|---:|---:|
+| Tracked identity F1 | 14.3% | 71.4% |
+| Current median center error | Not measured | 0.23 ball radii |
+
+This is a development slice, not a release benchmark. It is incomplete, contains only seven labeled visible frames, and has no absent-ball labels. It therefore does not measure false positives when no basketball is present, different balls/players/backgrounds, sustained occlusion, or general-environment performance. The generic `sports ball` model detected the basketball only sparsely in the supplied recordings; most tracking evidence still comes from heuristic color/motion candidates.
+
+Run ball identity evaluation with:
+
+```bash
+npm run validation:ball -- --manifest validation/manifest.json --split calibration
+```
+
+## Live browser diagnostics
+
+Controlled generated camera feeds ran at approximately 10 analyzed frames per second, with maximum inference gaps around one target interval. Orange-ball runs produced 100% measured/tracked coverage; grayscale runs produced approximately 98-99% measured/tracked coverage after pose/body priors were added. Expanded front-camera view continued advancing and tracking.
+
+These are pipeline and coverage diagnostics only. A track existing in a frame does not prove that it belongs to the basketball. Identity accuracy requires independent ball boxes such as those evaluated above.
+
+## Verification status
+
+The latest full automated suite passed 61/61 tests covering tracking, candidate extraction, ball identity, pose crop mapping, sampling, live event delivery, move detection, validation isolation, and gates. Strict TypeScript and the production build pass. Synthetic detector runtime and unit fixtures are useful regressions but are not real-video accuracy evidence.
+
+Last documented calibration run: 2026-07-12. Results apply only to the controlled frontal-view recordings described above.

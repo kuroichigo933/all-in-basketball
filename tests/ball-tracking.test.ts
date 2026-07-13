@@ -30,3 +30,14 @@ test("rejects physically implausible jumps", () => {
   const tracked = trackBallContinuity([frame(0, 0), frame(100, null), frame(200, 1)], { maxNormalizedSpeedPerSecond: 2 });
   assert.equal(tracked[1].ball, null);
 });
+
+test("preserves measurement provenance and does not use predictions as anchors", () => {
+  const color = { ...frame(0, 0.2), ballSource: "color" as const };
+  const predicted = { ...frame(100, 0.8), ballSource: "interpolated" as const, ballConfidence: 0.3 };
+  const motion = { ...frame(200, 0.4), ballSource: "motion" as const };
+  const tracked = trackBallContinuity([color, predicted, motion]);
+  assert.equal(tracked[0].ballSource, "color");
+  assert.equal(tracked[1].ballSource, "interpolated");
+  assert.ok(Math.abs(tracked[1].ball!.x - 0.3) < 0.001);
+  assert.equal(tracked[2].ballSource, "motion");
+});

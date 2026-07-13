@@ -1,7 +1,10 @@
 import type { ExpectedMove, EvaluationMetrics } from "./evaluate.ts";
 import type { AnalysisSummary, MoveName, MotionObservation } from "./types.ts";
+import type { SamplingDiagnostics } from "./sampling.ts";
+import type { BallIdentityLabel } from "./evaluateBall.ts";
 
 export const ALL_MOVE_NAMES: MoveName[] = ["crossover", "between-the-legs", "behind-the-back", "hesitation", "in-and-out"];
+export const CONTROLLED_MOVE_NAMES: MoveName[] = ["behind-the-back", "between-the-legs"];
 export type ValidationSplit = "calibration" | "holdout";
 export type ValidationClip = {
   id: string; sourceId: string; segmentId: string; cohort: string; split: ValidationSplit;
@@ -11,12 +14,12 @@ export type ValidationManifest = { schemaVersion: 2; toleranceMs?: number; clips
 export type AnalysisExport = {
   schemaVersion: 2; clip?: Omit<ValidationClip, "observations" | "expected">;
   sampleIntervalMs: number; observations: MotionObservation[]; labels: ExpectedMove[];
-  result: AnalysisSummary | null;
+  ballLabels?: BallIdentityLabel[]; result: AnalysisSummary | null; sampling?: SamplingDiagnostics;
 };
 export type GateResult = { status: "pass" | "fail" | "blocked"; reason: string };
 export type ValidationReport = {
   split: ValidationSplit; clips: number; processed: number; failures: string[];
-  total: EvaluationMetrics; byClass: Partial<Record<MoveName, EvaluationMetrics>>;
+  total: EvaluationMetrics; controlledTotal: EvaluationMetrics; byClass: Partial<Record<MoveName, EvaluationMetrics>>;
   coverage: { pose: number; detectedBall: number; trackedBall: number };
   gates: { controlledTwoClass: GateResult; fiveClassRelease: GateResult };
 };
@@ -37,12 +40,12 @@ export function selectSplit(manifest: ValidationManifest, split: ValidationSplit
   return manifest.clips.filter((clip) => clip.split === split);
 }
 
-export function evaluateGates(labels: ExpectedMove[], metrics: EvaluationMetrics) {
+export function evaluateGates(labels: ExpectedMove[], controlledMetrics: EvaluationMetrics, releaseMetrics: EvaluationMetrics = controlledMetrics) {
   const represented = new Set(labels.map((label) => label.move));
-  const controlled = ["behind-the-back", "between-the-legs"].every((move) => represented.has(move as MoveName));
+  const controlled = CONTROLLED_MOVE_NAMES.every((move) => represented.has(move));
   const allFive = ALL_MOVE_NAMES.every((move) => represented.has(move));
   return {
-    controlledTwoClass: controlled ? { status: metrics.meets95Percent ? "pass" : "fail", reason: "Holdout contains both controlled classes." } as GateResult : { status: "blocked", reason: "Holdout must contain behind-the-back and between-the-legs labels." } as GateResult,
-    fiveClassRelease: allFive ? { status: metrics.meets95Percent ? "pass" : "fail", reason: "Holdout contains all five move classes." } as GateResult : { status: "blocked", reason: "Independent holdout labels do not cover all five move classes." } as GateResult,
+    controlledTwoClass: controlled ? { status: controlledMetrics.meets95Percent ? "pass" : "fail", reason: "Evaluation set contains both controlled classes; gate uses only controlled-class predictions." } as GateResult : { status: "blocked", reason: "Evaluation set must contain behind-the-back and between-the-legs labels." } as GateResult,
+    fiveClassRelease: allFive ? { status: releaseMetrics.meets95Percent ? "pass" : "fail", reason: "Evaluation set contains all five move classes." } as GateResult : { status: "blocked", reason: "Independent labeled evaluation data do not cover all five move classes." } as GateResult,
   };
 }

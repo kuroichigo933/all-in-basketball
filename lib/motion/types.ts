@@ -1,4 +1,4 @@
-export type Point = { x: number; y: number; visibility?: number };
+export type Point = { x: number; y: number; z?: number; visibility?: number };
 
 export type MotionObservation = {
   timeMs: number;
@@ -14,6 +14,10 @@ export type MotionObservation = {
   rightKnee: Point;
   ball: Point | null;
   ballSource?: "detected" | "color" | "motion" | "interpolated" | "missing";
+  /** True for a measurement accepted on this frame, false for tracker prediction or absence. */
+  ballMeasured?: boolean;
+  /** Accepted detector candidate before temporal smoothing; absent on predicted frames. */
+  ballMeasurement?: Point;
 };
 
 export type MoveName = "crossover" | "between-the-legs" | "behind-the-back" | "hesitation" | "in-and-out";
