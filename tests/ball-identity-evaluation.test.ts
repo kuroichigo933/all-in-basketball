@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { centerErrorRadii, evaluateBallIdentity, validateBallIdentityLabels, type BallIdentityLabel, type BallIdentityObservation } from "../lib/motion/evaluateBall.ts";
+import { centerErrorRadii, evaluateBallIdentity, validateBallIdentityEvaluationLabels, validateBallIdentityLabels, type BallIdentityEvaluationLabel, type BallIdentityLabel, type BallIdentityObservation } from "../lib/motion/evaluateBall.ts";
 
 const visible = (timeMs: number, x = 0.4, y = 0.5): BallIdentityLabel => ({
   timeMs, visibility: "visible", box: { x: x - 0.05, y: y - 0.05, width: 0.1, height: 0.1 },
@@ -25,6 +25,40 @@ test("scores visible localization and independently labeled no-ball false positi
   assert.equal(report.tracked.precision, 0.5);
   assert.equal(report.tracked.recall, 1);
   assert.equal(report.tracked.negativeRejectionRate, 0);
+});
+
+test("reports tracker prediction through occlusion without changing visible or absent identity metrics", () => {
+  const labels: BallIdentityEvaluationLabel[] = [visible(0), { timeMs: 100, visibility: "absent" }, { timeMs: 200, visibility: "occluded" }];
+  const report = evaluateBallIdentity(labels, [observation(0, 0.4), observation(100, null), observation(200, 0.45, false)]);
+  assert.deepEqual([report.tracked.visibleLabels, report.tracked.absentLabels, report.tracked.truePositives, report.tracked.trueNegatives], [1, 1, 1, 1]);
+  assert.equal(report.tracked.matchedLabels, 2);
+  assert.equal(report.timing.matchedLabels, 3);
+  assert.deepEqual(report.occlusion, {
+    occludedLabels: 1, matchedLabels: 1, unmatchedLabels: 0, trackedFrames: 1, predictedFrames: 1,
+    measuredFrames: 0, missingFrames: 0, ambiguousFrames: 0, trackPresenceRate: 1, predictionPersistenceRate: 1,
+  });
+});
+
+test("separates measured distractor locks, missing tracks, and unmatched occlusion labels", () => {
+  const labels: BallIdentityEvaluationLabel[] = [
+    { timeMs: 0, visibility: "occluded" }, { timeMs: 100, visibility: "occluded" },
+    { timeMs: 200, visibility: "occluded" }, { timeMs: 300, visibility: "occluded" },
+  ];
+  const report = evaluateBallIdentity(labels, [observation(0, 0.4, false), observation(100, 0.4, true), observation(200, null)], { timestampToleranceMs: 0 });
+  assert.deepEqual(report.occlusion, {
+    occludedLabels: 4, matchedLabels: 3, unmatchedLabels: 1, trackedFrames: 2, predictedFrames: 1,
+    measuredFrames: 1, missingFrames: 1, ambiguousFrames: 0, trackPresenceRate: 2 / 3, predictionPersistenceRate: 1 / 3,
+  });
+  assert.deepEqual([report.tracked.visibleLabels, report.tracked.absentLabels, report.tracked.truePositives, report.tracked.falsePositives], [0, 0, 0, 0]);
+  assert.match(report.warnings.join(" "), /distractor locks/);
+});
+
+test("does not claim prediction persistence when occluded track provenance is ambiguous", () => {
+  const legacy: BallIdentityObservation = { timeMs: 0, ball: { x: 0.4, y: 0.5 }, ballSource: "motion" };
+  const report = evaluateBallIdentity([{ timeMs: 0, visibility: "occluded" }], [legacy]);
+  assert.equal(report.occlusion.trackPresenceRate, 1);
+  assert.equal(report.occlusion.ambiguousFrames, 1);
+  assert.equal(report.occlusion.predictionPersistenceRate, null);
 });
 
 test("reports normalized center error in annotated ball radii", () => {
@@ -69,4 +103,6 @@ test("validates normalized boxes and unique timestamps", () => {
   assert.throws(() => validateBallIdentityLabels([visible(0), visible(0)]), /Duplicate/);
   assert.throws(() => validateBallIdentityLabels([{ timeMs: 0, visibility: "visible", box: { x: 0.9, y: 0, width: 0.2, height: 0.1 } }]), /inside the frame/);
   assert.deepEqual(validateBallIdentityLabels([{ timeMs: 100, visibility: "absent" }, visible(0)]).map((label) => label.timeMs), [0, 100]);
+  assert.deepEqual(validateBallIdentityEvaluationLabels([{ timeMs: 200, visibility: "occluded" }, { timeMs: 100, visibility: "absent" }, visible(0)]).map((label) => label.timeMs), [0, 100, 200]);
+  assert.throws(() => validateBallIdentityLabels([{ timeMs: 0, visibility: "occluded" }]), /visible or absent/);
 });

@@ -12,6 +12,7 @@
     "validation:prepare": "node --experimental-strip-types scripts/prepare-validation.ts",
     "validation:tune": "node --experimental-strip-types scripts/tune-validation.ts",
     "validation:ball": "node --experimental-strip-types scripts/evaluate-ball-validation.ts",
+    "ball-model:verify": "node --experimental-strip-types scripts/verify-ball-model-artifact.ts",
     "migrate": "node scripts/migrate.mjs",
     "start": "next start"
   },

@@ -1,7 +1,7 @@
 import type { ExpectedMove, EvaluationMetrics } from "./evaluate.ts";
 import type { AnalysisSummary, MoveName, MotionObservation } from "./types.ts";
 import type { SamplingDiagnostics } from "./sampling.ts";
-import type { BallIdentityLabel } from "./evaluateBall.ts";
+import type { BallIdentityEvaluationLabel } from "./evaluateBall.ts";
 
 export const ALL_MOVE_NAMES: MoveName[] = ["crossover", "between-the-legs", "behind-the-back", "hesitation", "in-and-out"];
 export const CONTROLLED_MOVE_NAMES: MoveName[] = ["behind-the-back", "between-the-legs"];
@@ -14,7 +14,7 @@ export type ValidationManifest = { schemaVersion: 2; toleranceMs?: number; clips
 export type AnalysisExport = {
   schemaVersion: 2; clip?: Omit<ValidationClip, "observations" | "expected">;
   sampleIntervalMs: number; observations: MotionObservation[]; labels: ExpectedMove[];
-  ballLabels?: BallIdentityLabel[]; result: AnalysisSummary | null; sampling?: SamplingDiagnostics;
+  ballLabels?: BallIdentityEvaluationLabel[]; result: AnalysisSummary | null; sampling?: SamplingDiagnostics;
 };
 export type GateResult = { status: "pass" | "fail" | "blocked"; reason: string };
 export type ValidationReport = {

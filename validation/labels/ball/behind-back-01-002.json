@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "clipId": "behind-back-01-002",
+  "protocol": {
+    "name": "calibration-representative-v1-independent-visual-labeling",
+    "selection": "Timestamps were predeclared before visual labeling. Labels were created from rendered source-video frames only, without reviewing observations, tracker output, or prior labels.",
+    "scheduledTimesMs": [800, 2500, 4200, 5800, 7500, 9200, 10800, 12500, 14200, 15800, 17500, 19200]
+  },
+  "labels": [
+    { "timeMs": 800, "visibility": "visible", "box": { "x": 0.480469, "y": 0.586111, "width": 0.053125, "height": 0.105556 } },
+    { "timeMs": 2500, "visibility": "visible", "box": { "x": 0.498437, "y": 0.506944, "width": 0.00625, "height": 0.047222 } },
+    { "timeMs": 4200, "visibility": "visible", "box": { "x": 0.513281, "y": 0.495833, "width": 0.021875, "height": 0.073611 } },
+    { "timeMs": 5800, "visibility": "visible", "box": { "x": 0.516406, "y": 0.494444, "width": 0.017188, "height": 0.061111 } },
+    { "timeMs": 7500, "visibility": "visible", "box": { "x": 0.5125, "y": 0.5375, "width": 0.051562, "height": 0.090278 } },
+    { "timeMs": 9200, "visibility": "occluded" },
+    { "timeMs": 10800, "visibility": "visible", "box": { "x": 0.435156, "y": 0.629167, "width": 0.050781, "height": 0.105556 } },
+    { "timeMs": 12500, "visibility": "visible", "box": { "x": 0.426563, "y": 0.726389, "width": 0.047656, "height": 0.086111 } },
+    { "timeMs": 14200, "visibility": "visible", "box": { "x": 0.450781, "y": 0.454167, "width": 0.051562, "height": 0.086111 } },
+    { "timeMs": 15800, "visibility": "visible", "box": { "x": 0.582031, "y": 0.538889, "width": 0.049219, "height": 0.084722 } },
+    { "timeMs": 17500, "visibility": "visible", "box": { "x": 0.557031, "y": 0.688889, "width": 0.05, "height": 0.111111 } },
+    { "timeMs": 19200, "visibility": "visible", "box": { "x": 0.559375, "y": 0.598611, "width": 0.032031, "height": 0.061111 } }
+  ]
+}

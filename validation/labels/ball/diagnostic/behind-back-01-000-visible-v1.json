@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "clipId": "behind-back-01-000",
+  "protocol": {
+    "name": "diagnostic-visible-v1",
+    "selection": "Historical fixed seven-frame visible-ball diagnostic slice; not part of the representative protocol.",
+    "scheduledTimesMs": [13000, 14000, 15000, 16000, 17000, 18000, 19000]
+  },
+  "labels": [
+    { "timeMs": 13000, "visibility": "visible", "box": { "x": 0.522, "y": 0.438, "width": 0.055, "height": 0.094 } },
+    { "timeMs": 14000, "visibility": "visible", "box": { "x": 0.529, "y": 0.440, "width": 0.055, "height": 0.096 } },
+    { "timeMs": 15000, "visibility": "visible", "box": { "x": 0.529, "y": 0.446, "width": 0.057, "height": 0.100 } },
+    { "timeMs": 16000, "visibility": "visible", "box": { "x": 0.535, "y": 0.462, "width": 0.057, "height": 0.100 } },
+    { "timeMs": 17000, "visibility": "visible", "box": { "x": 0.443, "y": 0.494, "width": 0.057, "height": 0.100 } },
+    { "timeMs": 18000, "visibility": "visible", "box": { "x": 0.394, "y": 0.568, "width": 0.058, "height": 0.101 } },
+    { "timeMs": 19000, "visibility": "visible", "box": { "x": 0.554, "y": 0.720, "width": 0.059, "height": 0.104 } }
+  ]
+}

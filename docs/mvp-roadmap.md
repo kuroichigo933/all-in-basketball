@@ -11,14 +11,19 @@ This roadmap is ordered by product risk and validation value. The front-facing l
 - Independent move interval annotation plus independent ball-box/no-ball annotation.
 - Local preparation of nine real clips, 126 independently labeled two-class repetitions, chronological calibration/holdout isolation, tuning, per-class reporting, and explicit controlled/five-class gates.
 - Stance-aware provisional wrist-transfer evidence and live event settling/deduplication.
-- Latest full regression suite: 61/61 tests passing.
+- Two-frame automatic acquisition/reacquisition, custom MediaPipe detector seam with generic fallback, and learned-detector provenance.
+- Versioned ball-label sidecars, 100 ms snapping, import/export, representative schedule navigation, and incomplete-protocol failure.
+- A complete predeclared 60-frame calibration protocol with 56 visible boxes and four separately scored full occlusions.
+- Two coherent frames for automatic cold acquisition/reacquisition, plus a versioned custom-model artifact verifier.
+- Export-time rejection of incomplete cadence and decoded-frame drift above 50 ms, matching evaluator checks.
+- Last complete regression run: 78/78 tests, strict type-check, synthetic benchmark, production build, and expanded live-camera smoke test pass.
 
 ## Priority 1 - establish ball identity, not just coverage
 
-1. Expand ball labels across calibration clips, including regular no-ball frames, occlusions, black and orange balls, and hard body/shadow distractors.
-2. Use `npm run validation:ball` to report raw-measurement and tracked precision, recall, F1, center error, negative rejection, and unmatched timestamps.
-3. Evaluate a licensed basketball-specific detector or train/export one for browser inference. Compare it on the fixed labels before replacing the generic model.
-4. Add identity-aware recovery after occlusion so a plausible nearby body component cannot silently become the new ball.
+1. Add real, predeclared no-ball frames, black and orange balls, varied lighting/players, and hard body/shadow distractors. The first 60-frame orange-ball schedule is complete but has no absent-ball negatives.
+2. Evaluate a licensed basketball-specific detector or train/export one for browser inference. Compare it on the fixed labels before replacing the generic model; the current default reaches only 0.428571 tracked/raw F1.
+3. Reject stable body/shadow candidates using basketball-specific visual identity or learned appearance, without suppressing held balls or fast dribbles.
+4. Improve measured occlusion entry and reacquisition: the current four occlusion samples all attach to measured distractors and show zero valid prediction persistence.
 
 Acceptance: a sufficiently varied, independently labeled calibration cohort reaches the chosen ball-identity target, including absent-ball negatives. High coverage alone does not satisfy this milestone.
 
@@ -26,7 +31,7 @@ Acceptance: a sufficiently varied, independently labeled calibration cohort reac
 
 1. Regenerate observations after each materially improved ball detector while preserving labels and split assignments.
 2. Diagnose behind-the-back and between-the-legs errors by ball identity, pose coverage, transition timing, and stance/depth evidence rather than widening thresholds indiscriminately.
-3. Tune configuration on calibration only. Final consistent controlled metrics are precision 0.666667, recall 0.545455, and F1 0.600000.
+3. Tune configuration on calibration only. Current controlled metrics are precision 0.658537, recall 0.490909, and F1 0.562500.
 4. Stop tuning when precision and recall both reach 0.95 or document the detector/data limitation.
 
 Acceptance: calibration demonstrates at least 0.95 precision and recall with both controlled classes represented and no sampling failures.

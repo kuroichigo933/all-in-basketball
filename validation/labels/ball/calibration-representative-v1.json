@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "protocol": "calibration-representative-v1",
+  "selection": "Twelve timestamps declared before reviewing detector predictions; score clips micro and per-clip.",
+  "clips": {
+    "behind-back-01-000": [800, 2500, 4200, 5800, 7500, 9200, 10800, 12500, 14200, 15800, 17500, 19200],
+    "behind-back-01-002": [800, 2500, 4200, 5800, 7500, 9200, 10800, 12500, 14200, 15800, 17500, 19200],
+    "between-legs-01-000": [800, 2500, 4200, 5800, 7500, 9200, 10800, 12500, 14200, 15800, 17500, 19200],
+    "between-legs-01-002": [800, 2500, 4200, 5800, 7500, 9200, 10800, 12500, 14200, 15800, 17500, 19200],
+    "between-legs-01-004": [300, 900, 1500, 2200, 2800, 3400, 4000, 4600, 5200, 5900, 6500, 7100]
+  }
+}

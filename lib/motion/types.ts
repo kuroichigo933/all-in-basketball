@@ -18,6 +18,8 @@ export type MotionObservation = {
   ballMeasured?: boolean;
   /** Accepted detector candidate before temporal smoothing; absent on predicted frames. */
   ballMeasurement?: Point;
+  /** Model identifier when the accepted measurement came from a learned detector. */
+  ballDetectorId?: string;
 };
 
 export type MoveName = "crossover" | "between-the-legs" | "behind-the-back" | "hesitation" | "in-and-out";

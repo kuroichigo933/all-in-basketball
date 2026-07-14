@@ -32,13 +32,13 @@ The latest controlled calibration result on the real two-class cohort is:
 
 | Metric | Result |
 |---|---:|
-| Calibration precision | 0.666667 |
-| Calibration recall | 0.545455 |
-| Calibration F1 | 0.600000 |
-| Once-only holdout precision | 0.705882 |
-| Once-only holdout recall | 0.507042 |
-| Once-only holdout F1 | 0.590164 |
+| Current calibration precision | 0.658537 |
+| Current calibration recall | 0.490909 |
+| Current calibration F1 | 0.562500 |
+| Prior configuration's once-only holdout precision | 0.705882 |
+| Prior configuration's once-only holdout recall | 0.507042 |
+| Prior configuration's once-only holdout F1 | 0.590164 |
 
-The controlled gate requires both behind-the-back and between-the-legs to be represented and requires micro precision and recall of at least 0.95 on holdout data. The configuration was selected on calibration, evaluated on holdout exactly once, and failed. Those holdout labels cannot now become tuning feedback. The five-class release gate remains blocked until independent holdout labels exist for crossover, hesitation, and in-and-out as well.
+The controlled gate requires both behind-the-back and between-the-legs to be represented and requires micro precision and recall of at least 0.95 on holdout data. The prior configuration was evaluated on holdout exactly once and failed. Identity-safe reacquisition was subsequently evaluated on calibration only; those consumed holdout labels were not rerun or used as feedback. The five-class release gate remains blocked until independent holdout labels exist for crossover, hesitation, and in-and-out as well.
 
 Synthetic tests verify rule mechanics but do not count as accuracy evidence. No 95% claim is warranted by the current results.

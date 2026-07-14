@@ -1,6 +1,6 @@
 import type { MotionObservation, Point } from "./types.ts";
 
-export type BallMeasurement = { point: Point; confidence: number; source: NonNullable<MotionObservation["ballSource"]> };
+export type BallMeasurement = { point: Point; confidence: number; source: NonNullable<MotionObservation["ballSource"]>; detectorId?: string };
 export type OnlineBallTrack = BallMeasurement & { predicted: boolean; measurementPoint?: Point };
 
 const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value));
@@ -18,6 +18,7 @@ const minimumMeasurementConfidence: Record<BallMeasurement["source"], number> = 
 export class OnlineBallTracker {
   private point: Point | null = null;
   private velocity: Point = { x: 0, y: 0 };
+  private pending: { measurement: BallMeasurement; timeMs: number } | null = null;
   private updatedAt = 0;
   private measuredAt = 0;
   private confidence = 0;
@@ -26,10 +27,10 @@ export class OnlineBallTracker {
 
   constructor(maxGapMs = 500, maxSpeedPerSecond = 3.5) { this.maxGapMs = maxGapMs; this.maxSpeedPerSecond = maxSpeedPerSecond; }
 
-  reset() { this.point = null; this.velocity = { x: 0, y: 0 }; this.updatedAt = 0; this.measuredAt = 0; this.confidence = 0; }
+  reset() { this.point = null; this.velocity = { x: 0, y: 0 }; this.pending = null; this.updatedAt = 0; this.measuredAt = 0; this.confidence = 0; }
 
   seed(timeMs: number, point: Point) {
-    this.point = { ...point }; this.velocity = { x: 0, y: 0 }; this.updatedAt = timeMs; this.measuredAt = timeMs; this.confidence = 0.8;
+    this.point = { ...point }; this.velocity = { x: 0, y: 0 }; this.pending = null; this.updatedAt = timeMs; this.measuredAt = timeMs; this.confidence = 0.8;
   }
 
   update(timeMs: number, measurements: BallMeasurement[]): OnlineBallTrack | null {
@@ -37,8 +38,28 @@ export class OnlineBallTracker {
     if (!this.point) {
       const first = [...measurements].filter((measurement) => sourceReliability[measurement.source] > 0)
         .sort((a, b) => b.confidence * sourceReliability[b.source] - a.confidence * sourceReliability[a.source])[0];
-      if (!first) return null; this.seed(timeMs, first.point); this.confidence = first.confidence;
-      return { ...first, point: { ...first.point }, predicted: false, measurementPoint: { ...first.point } };
+      if (!first) { this.pending = null; return null; }
+      if (this.pending) {
+        const elapsedMs = timeMs - this.pending.timeMs;
+        const gate = clamp(0.14 + Math.max(0, elapsedMs) / 1000 * 1.6, 0.14, 0.3);
+        const coherent = measurements.filter((measurement) => sourceReliability[measurement.source] > 0).map((measurement) => {
+          const separation = Math.hypot(measurement.point.x - this.pending!.measurement.point.x, measurement.point.y - this.pending!.measurement.point.y);
+          const proximity = Math.max(0, 1 - separation / gate);
+          return { measurement, separation, score: measurement.confidence * sourceReliability[measurement.source] * 0.6 + proximity * 0.4 };
+        }).filter((candidate) => elapsedMs > 0 && elapsedMs <= 250 && candidate.separation <= gate)
+          .sort((a, b) => b.score - a.score)[0];
+        if (coherent) {
+          const dtSeconds = elapsedMs / 1000;
+          const velocity = { x: (coherent.measurement.point.x - this.pending.measurement.point.x) / dtSeconds,
+            y: (coherent.measurement.point.y - this.pending.measurement.point.y) / dtSeconds };
+          const speed = Math.hypot(velocity.x, velocity.y); const scale = speed > this.maxSpeedPerSecond ? this.maxSpeedPerSecond / speed : 1;
+          this.point = { ...coherent.measurement.point }; this.velocity = { x: velocity.x * scale, y: velocity.y * scale };
+          this.pending = null; this.updatedAt = timeMs; this.measuredAt = timeMs; this.confidence = coherent.measurement.confidence;
+          return { ...coherent.measurement, point: { ...this.point }, predicted: false, measurementPoint: { ...coherent.measurement.point } };
+        }
+      }
+      this.pending = { measurement: { ...first, point: { ...first.point } }, timeMs };
+      return null;
     }
     const dtMs = Math.max(1, timeMs - this.updatedAt); const dtSeconds = dtMs / 1000;
     const predicted = { x: this.point.x + this.velocity.x * dtSeconds, y: this.point.y + this.velocity.y * dtSeconds };
@@ -65,6 +86,10 @@ export class OnlineBallTracker {
       this.confidence *= Math.exp(-dtMs / 300);
       return { point: { ...this.point }, confidence: this.confidence, source: "interpolated", predicted: true };
     }
-    this.reset(); return null;
+    this.point = null; this.velocity = { x: 0, y: 0 }; this.updatedAt = 0; this.measuredAt = 0; this.confidence = 0;
+    const first = [...measurements].filter((measurement) => sourceReliability[measurement.source] > 0)
+      .sort((a, b) => b.confidence * sourceReliability[b.source] - a.confidence * sourceReliability[a.source])[0];
+    this.pending = first ? { measurement: { ...first, point: { ...first.point } }, timeMs } : null;
+    return null;
   }
 }

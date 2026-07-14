@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "clipId": "between-legs-01-002",
+  "protocol": {
+    "name": "calibration-representative-v1-independent-visual",
+    "scheduledTimesMs": [800, 2500, 4200, 5800, 7500, 9200, 10800, 12500, 14200, 15800, 17500, 19200]
+  },
+  "labels": [
+    { "timeMs": 800, "visibility": "visible", "box": { "x": 0.53203125, "y": 0.48055556, "width": 0.05390625, "height": 0.09444444 } },
+    { "timeMs": 2500, "visibility": "visible", "box": { "x": 0.43984375, "y": 0.47361111, "width": 0.05078125, "height": 0.09444444 } },
+    { "timeMs": 4200, "visibility": "visible", "box": { "x": 0.43984375, "y": 0.47361111, "width": 0.05078125, "height": 0.09444444 } },
+    { "timeMs": 5800, "visibility": "visible", "box": { "x": 0.4515625, "y": 0.49861111, "width": 0.05234375, "height": 0.09305556 } },
+    { "timeMs": 7500, "visibility": "occluded" },
+    { "timeMs": 9200, "visibility": "visible", "box": { "x": 0.52578125, "y": 0.48333333, "width": 0.0546875, "height": 0.09583333 } },
+    { "timeMs": 10800, "visibility": "visible", "box": { "x": 0.42578125, "y": 0.47916667, "width": 0.0515625, "height": 0.09583333 } },
+    { "timeMs": 12500, "visibility": "visible", "box": { "x": 0.55, "y": 0.50972222, "width": 0.0515625, "height": 0.09583333 } },
+    { "timeMs": 14200, "visibility": "visible", "box": { "x": 0.40625, "y": 0.675, "width": 0.04921875, "height": 0.10694444 } },
+    { "timeMs": 15800, "visibility": "visible", "box": { "x": 0.54921875, "y": 0.60138889, "width": 0.053125, "height": 0.09722222 } },
+    { "timeMs": 17500, "visibility": "visible", "box": { "x": 0.39609375, "y": 0.58333333, "width": 0.05234375, "height": 0.09583333 } },
+    { "timeMs": 19200, "visibility": "visible", "box": { "x": 0.41015625, "y": 0.56666667, "width": 0.0515625, "height": 0.09444444 } }
+  ]
+}

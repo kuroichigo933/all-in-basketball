@@ -21,3 +21,9 @@ test("accepts a complete fixed cadence for validation", () => {
   const declared = summarizeSampling(observations, 300, 100);
   assert.equal(assertUsableSampling(observations, 100, declared).maximumGapMs, 100);
 });
+
+test("rejects decoded frames that are too far from their requested timestamps", () => {
+  const observations = [0, 100, 200, 300].map((timeMs) => ({ timeMs }));
+  const declared = { ...summarizeSampling(observations, 300, 100), maximumFrameOffsetMs: 166.667 };
+  assert.throws(() => assertUsableSampling(observations, 100, declared), /Decoded frame offset/);
+});
