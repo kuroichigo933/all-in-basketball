@@ -55,7 +55,17 @@ export default function AppNav({ role, name }: { role: string; name: string }) {
             ))}
           </nav>
           <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-muted sm:inline">{name}</span>
+            <Link
+              href="/settings"
+              className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors ${
+                pathname.startsWith("/settings")
+                  ? "border-game bg-game/10 text-game"
+                  : "border-line text-chalk hover:border-game hover:text-game"
+              }`}
+              aria-label="Open account settings"
+            >
+              {name || "Account"}
+            </Link>
             <button onClick={signOut} className="text-sm text-muted hover:text-game">Sign out</button>
           </div>
         </div>
