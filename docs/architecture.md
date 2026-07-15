@@ -35,6 +35,7 @@ At each analyzed frame:
 3. Full-frame pixels produce multiple compact orange candidates and multiple three-frame, color-independent motion candidates.
 4. `applyPoseBallPrior` retains wrist-controlled and plausible low-bounce candidates while demoting shorts/body, knee/foot, below-foot, and unrelated-motion distractors. Generic-model candidates keep their model confidence.
 5. `OnlineBallTracker` scores candidate quality and proximity to its velocity prediction, limits acceleration/speed, and predicts for at most about 500 ms during temporary loss. Automatic acquisition or reacquisition requires two spatially coherent frames; user tap-to-lock intentionally bypasses that delay.
+6. Candidate measurements are accepted only when the pose-centred crop confirms reliable player evidence. During temporary pose loss the tracker receives an empty update, allowing bounded prediction without acquiring background motion.
 
 Every observation records the selected point, its confidence, whether it was measured, the raw measurement point, and its source (`detected`, `color`, `motion`, `interpolated`, or `missing`). Learned detections also record a detector ID. Predicted points never become measured anchors.
 

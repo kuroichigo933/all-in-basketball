@@ -23,6 +23,15 @@ test("refuses replay when candidate snapshots are missing", () => {
   assert.throws(() => replayBallTracking([{ ...observation(0, []), ballCandidates: undefined }]), /no candidate snapshot/);
 });
 
+test("replay honors player-gated measurement acceptance", () => {
+  const distractor = [{ point: { x: 0.5, y: 0.5 }, confidence: 0.9, source: "color" as const }];
+  const replayed = replayBallTracking([
+    { ...observation(0, distractor), poseConfidence: 0, playerDetected: false },
+    { ...observation(100, distractor), poseConfidence: 0, playerDetected: false },
+  ]);
+  assert.equal(replayed[0].ball, null); assert.equal(replayed[1].ball, null);
+});
+
 test("builds a finite calibration grid for immediate learned-detection overrides", () => {
   const grid = buildBallTrackerConfigGrid();
   assert.equal(grid.length, 48);

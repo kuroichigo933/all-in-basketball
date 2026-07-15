@@ -52,6 +52,21 @@ test("does not acquire a negligible pose-demoted visual candidate", () => {
   assert.equal(tracker.update(0, [{ point: { x: 0.5, y: 0.9 }, confidence: 0.02, source: "motion" }]), null);
 });
 
+test("does not acquire candidates while player evidence is unavailable", () => {
+  const tracker = new OnlineBallTracker();
+  const distractor = [{ point: { x: 0.5, y: 0.5 }, confidence: 0.9, source: "color" as const }];
+  assert.equal(tracker.update(0, distractor, false), null);
+  assert.equal(tracker.update(100, distractor, false), null);
+});
+
+test("predicts briefly instead of resetting when player evidence is temporarily unavailable", () => {
+  const tracker = new OnlineBallTracker(300); tracker.seed(0, { x: 0.2, y: 0.5 });
+  tracker.update(100, [{ point: { x: 0.3, y: 0.5 }, confidence: 0.8, source: "motion" }]);
+  const predicted = tracker.update(200, [{ point: { x: 0.9, y: 0.1 }, confidence: 0.99, source: "color" }], false);
+  assert.ok(predicted?.predicted); assert.ok(predicted.point.x < 0.5);
+  assert.equal(tracker.update(450, [], false), null);
+});
+
 test("requires two coherent frames before automatic acquisition", () => {
   const tracker = new OnlineBallTracker();
   assert.equal(tracker.update(0, [{ point: { x: 0.4, y: 0.6 }, confidence: 0.7, source: "motion" }]), null);

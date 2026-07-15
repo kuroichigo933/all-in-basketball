@@ -13,6 +13,7 @@
     "validation:import-mixed": "node --experimental-strip-types scripts/import-mixed-validation.ts",
     "validation:tune": "node --experimental-strip-types scripts/tune-validation.ts",
     "validation:tune-ball": "node --experimental-strip-types scripts/tune-ball-tracker.ts",
+    "validation:repeatability": "node --experimental-strip-types scripts/evaluate-repeatability.ts",
     "validation:ball": "node --experimental-strip-types scripts/evaluate-ball-validation.ts",
     "validation:ball-dataset": "node --experimental-strip-types scripts/export-ball-dataset.ts",
     "ball-model:verify": "node --experimental-strip-types scripts/verify-ball-model-artifact.ts",

@@ -69,7 +69,8 @@ export class OnlineBallTracker {
     this.point = { ...point }; this.velocity = { x: 0, y: 0 }; this.pending = null; this.challenger = null; this.updatedAt = timeMs; this.measuredAt = timeMs; this.confidence = 0.8;
   }
 
-  update(timeMs: number, measurements: BallMeasurement[]): OnlineBallTrack | null {
+  update(timeMs: number, measurements: BallMeasurement[], acceptMeasurements = true): OnlineBallTrack | null {
+    if (!acceptMeasurements) measurements = [];
     measurements = measurements.filter((measurement) => measurement.confidence >= minimumMeasurementConfidence[measurement.source]);
     if (!this.point) {
       const first = [...measurements].filter((measurement) => sourceReliability[measurement.source] > 0)

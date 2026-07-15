@@ -211,9 +211,12 @@ export default function AITracker() {
     const poseConfidence = points.length ? points.reduce((sum, point) => sum + (point.visibility ?? 1), 0) / points.length : 0;
     const measurements = detectVisualBalls(video, points);
     measurements.push(...modelMeasurements);
-    const ballTrack = onlineBallTrackerRef.current.update(timeMs, measurements); const ball = ballTrack?.point ?? null;
+    // Do not acquire a ball from full-frame background motion when no player
+    // pose is reliable. An existing track still receives an empty update and
+    // may predict through the normal short loss window.
+    const ballTrack = onlineBallTrackerRef.current.update(timeMs, measurements, Boolean(crop)); const ball = ballTrack?.point ?? null;
     const ballConfidence = ballTrack?.confidence ?? 0; previousBallRef.current = ball;
-    const observation: MotionObservation = { timeMs, poseConfidence, ballConfidence, ball, ballSource: ballTrack?.source ?? "missing", ballMeasured: Boolean(ballTrack && !ballTrack.predicted), ballMeasurement: ballTrack?.measurementPoint, ballDetectorId: ballTrack?.detectorId,
+    const observation: MotionObservation = { timeMs, poseConfidence, playerDetected: Boolean(crop), ballConfidence, ball, ballSource: ballTrack?.source ?? "missing", ballMeasured: Boolean(ballTrack && !ballTrack.predicted), ballMeasurement: ballTrack?.measurementPoint, ballDetectorId: ballTrack?.detectorId,
       ballMeasurementSize: ballTrack?.apparentSize,
       ballCandidates: measurements.map((measurement) => ({ point: { ...measurement.point }, confidence: measurement.confidence,
         source: measurement.source as "detected" | "color" | "motion", detectorId: measurement.detectorId,

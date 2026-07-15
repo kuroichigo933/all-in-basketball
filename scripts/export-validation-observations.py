@@ -7,9 +7,25 @@ from playwright.async_api import async_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 VIDEOS = ROOT / "validation" / "local" / "videos"
-OUTPUT = ROOT / "validation" / "observations"
+DEFAULT_OUTPUT = ROOT / "validation" / "observations"
+LOCAL_ROOT = (ROOT / "validation" / "local").resolve()
+
+def option(name):
+    if name not in sys.argv:
+        return None
+    index = sys.argv.index(name)
+    if index + 1 >= len(sys.argv):
+        raise ValueError(f"{name} requires a value")
+    return sys.argv[index + 1]
+
+output_option = option("--output-dir")
+OUTPUT = Path(output_option).resolve() if output_option else DEFAULT_OUTPUT
+if output_option and not OUTPUT.is_relative_to(LOCAL_ROOT):
+    raise ValueError("Custom observation output must stay under validation/local/")
 FORCE = "--force" in sys.argv
-FILTERS = {argument for argument in sys.argv[1:] if not argument.startswith("--")}
+value_indexes = {sys.argv.index("--output-dir") + 1} if "--output-dir" in sys.argv else set()
+FILTERS = {argument for index, argument in enumerate(sys.argv[1:], start=1)
+           if not argument.startswith("--") and index not in value_indexes}
 BASE_URL = os.environ.get("VALIDATION_BASE_URL", "http://127.0.0.1:3000").rstrip("/")
 
 async def main():

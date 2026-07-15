@@ -43,17 +43,24 @@ This entire source is a **calibration cohort**. Tracker changes and threshold se
 | Metric | Calibration result |
 |---|---:|
 | Segments / move labels | 5 / 71 |
-| Pose / measured-ball / tracked-ball coverage | 0.916418 / 0.959301 / 0.991142 |
-| Three-move precision / recall / F1 | 0.430769 / 0.394366 / 0.411765 |
-| Crossover precision / recall / F1 | 0.333333 / 0.200000 / 0.250000 |
-| Between-the-legs precision / recall / F1 | 0.425000 / 0.894737 / 0.576271 |
-| Behind-the-back precision / recall / F1 | 0.714286 / 0.227273 / 0.344828 |
+| Pose / measured-ball / tracked-ball coverage | 0.916418 / 0.887659 / 0.911540 |
+| Latest three-move precision / recall / F1 | 0.400000 / 0.338028 / 0.366412 |
+| Fixed-config gated repeatability F1 range | 0.360902-0.366412 |
+| Crossover precision / recall / F1 | 0.312500 / 0.166667 / 0.217391 |
+| Between-the-legs precision / recall / F1 | 0.400000 / 0.842105 / 0.542373 |
+| Behind-the-back precision / recall / F1 | 0.750000 / 0.136364 / 0.230769 |
 | Live three-move 95% gate | Failed |
 | Five-class release gate | Blocked |
 
-The predeclared ball-identity slice contains 23 visible boxes, one absent-ball negative, and one full occlusion. It measured tracked and raw precision 0.666667, recall 0.695652, and F1 0.680851. The candidate oracle found a correctly localized candidate at 21/23 visible labels (0.913043 recall), while the absent frame still contained candidates. The occluded timestamp matched a measured candidate, not a prediction. Thus 99.1% tracked coverage does not imply correct ball identity, and even perfect association cannot reach 95% with the current candidate set.
+The predeclared ball-identity slice contains 23 visible boxes, one absent-ball negative, and one full occlusion. Adjacent-frame inspection found one box centered above the visible ball; the ignored local sidecar was corrected from decoded pixels before the final evaluation. Player-gated association measured tracked precision/recall/F1 of 0.695652 and raw precision/recall/F1 of 0.727273/0.695652/0.711111. The absent frame contains raw candidates but no reliable player, so it is now a true negative instead of a false track. Candidate-oracle recall ranged from 22/23 to 23/23 across valid runs. The occluded timestamp matched a measured candidate, not a prediction.
 
-The final tracker records complete pre-association candidate snapshots, demotes tiny color/motion fragments, weights full-ball components, and permits an immediate override from a calibration-selected learned detection of plausible size. A 48-configuration replay search raised ball F1 from a no-override baseline of 0.382979 to 0.680851. Move F1 breaks exact ball-score ties, selecting a 0.045 minimum apparent-size floor that preserves ball F1 and avoids needless trajectory damage. This still cannot make the generic `sports ball` model reliable. Calibration-only move-threshold search over 243 configurations remains far below 95%, so additional threshold tuning is not the remedy.
+The final tracker records complete pre-association candidate snapshots, demotes tiny color/motion fragments, weights full-ball components, and permits an immediate override from a learned detection of plausible size. Replay now preserves the player-acceptance decision, so tuning cannot reintroduce no-player distractors. A replay-selected 0.25-confidence/0.025-size configuration preserved ball F1 but reduced fresh-browser move F1 from 0.366412 to 0.344828, so it was rejected and the prior 0.15/0.045 defaults remain. A wider color set, resolution-relative component ceiling, and 0.10 learned-confidence override were also tested and rejected. Calibration-only move-threshold search over 243 configurations remains far below 95%, so additional threshold tuning is not the remedy.
+
+### Fixed-configuration repeatability
+
+Browser exports can now target named ignored directories with `--output-dir`. `validation:repeatability` evaluates at least two distinct directories against one fixed saved move configuration, reports minimum/maximum/mean/spread for ball F1, candidate-oracle recall, and move F1, and fails its diagnostic when ball or move F1 spread exceeds 0.03 by default. This is a reproducibility diagnostic, not a release gate.
+
+Two independent player-gated exports produced identical ball F1 of 0.695652. Candidate-oracle recall ranged from 0.956522 to 1.000000. Move F1 ranged from 0.360902 to 0.366412, a spread of 0.005510, so the fixed-configuration diagnostic passed. Earlier larger score differences included retuning on each export and therefore mixed inference variance with threshold-selection variance.
 
 Reproduce the local workflow with:
 
@@ -64,6 +71,8 @@ npm run validation:tune -- --manifest validation/local/manifests/mixed-moves-01.
 npm run validation:tune-ball -- --manifest validation/local/manifests/mixed-moves-01.json --output validation/local/tuned-ball-tracker.json
 npm run validate:moves -- --manifest validation/local/manifests/mixed-moves-01.json --split calibration --config validation/local/mixed-moves-01-tuned-config.json
 npm run validation:ball -- --manifest validation/local/manifests/mixed-moves-01.json --split calibration
+python scripts/export-validation-observations.py --output-dir validation/local/repeatability/run-a --force mixed-moves-01-000
+npm run validation:repeatability -- --manifest validation/local/manifests/mixed-moves-01.json --runs validation/local/repeatability/run-a,validation/local/repeatability/run-b --config validation/local/mixed-moves-01-tuned-config.json
 ```
 
 ## Ball-identity slice
@@ -113,6 +122,6 @@ These are pipeline and coverage diagnostics only. A track existing in a frame do
 
 ## Verification status
 
-The latest mixed-video implementation run passed 97/97 tests, strict TypeScript, the synthetic move benchmark, and the production build. All five browser observation exports passed the sampling-cadence gates. The separate expanded live-camera smoke test was not rerun in this cycle. Synthetic detector runtime and unit fixtures are useful regressions but are not real-video accuracy evidence.
+The latest mixed-video implementation run passed 103/103 tests, strict TypeScript, the synthetic move benchmark, and the production build. All named browser observation exports used in the report passed the sampling-cadence gates. The separate expanded live-camera smoke test was not rerun in this cycle. Synthetic detector runtime and unit fixtures are useful regressions but are not real-video accuracy evidence.
 
 Latest documented mixed calibration run: 2026-07-14. Results apply only to the controlled frontal-view recordings described above.

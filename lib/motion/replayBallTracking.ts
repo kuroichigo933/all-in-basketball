@@ -9,7 +9,8 @@ export function replayBallTracking(
   const tracker = new OnlineBallTracker(500, 3.5, config);
   return observations.map((observation) => {
     if (!Array.isArray(observation.ballCandidates)) throw new Error(`Observation at ${observation.timeMs} ms has no candidate snapshot.`);
-    const track = tracker.update(observation.timeMs, observation.ballCandidates);
+    const playerDetected = observation.playerDetected ?? observation.poseConfidence >= 0.35;
+    const track = tracker.update(observation.timeMs, observation.ballCandidates, playerDetected);
     return {
       ...observation,
       ball: track?.point ?? null,

@@ -11,6 +11,8 @@ export type BallCandidateObservation = {
 export type MotionObservation = {
   timeMs: number;
   poseConfidence: number;
+  /** Whether this frame supplied enough player evidence to accept new ball measurements. */
+  playerDetected?: boolean;
   ballConfidence: number;
   leftWrist: Point;
   rightWrist: Point;
