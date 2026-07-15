@@ -5,6 +5,7 @@ import type { BallIdentityEvaluationLabel } from "./evaluateBall.ts";
 
 export const ALL_MOVE_NAMES: MoveName[] = ["crossover", "between-the-legs", "behind-the-back", "hesitation", "in-and-out"];
 export const CONTROLLED_MOVE_NAMES: MoveName[] = ["behind-the-back", "between-the-legs"];
+export const LIVE_MOVE_NAMES: MoveName[] = ["crossover", "between-the-legs", "behind-the-back"];
 export type ValidationSplit = "calibration" | "holdout";
 export type ValidationClip = {
   id: string; sourceId: string; segmentId: string; cohort: string; split: ValidationSplit;
@@ -19,9 +20,10 @@ export type AnalysisExport = {
 export type GateResult = { status: "pass" | "fail" | "blocked"; reason: string };
 export type ValidationReport = {
   split: ValidationSplit; clips: number; processed: number; failures: string[];
-  total: EvaluationMetrics; controlledTotal: EvaluationMetrics; byClass: Partial<Record<MoveName, EvaluationMetrics>>;
+  total: EvaluationMetrics; controlledTotal: EvaluationMetrics; liveThreeTotal: EvaluationMetrics;
+  byClass: Partial<Record<MoveName, EvaluationMetrics>>;
   coverage: { pose: number; detectedBall: number; trackedBall: number };
-  gates: { controlledTwoClass: GateResult; fiveClassRelease: GateResult };
+  gates: { controlledTwoClass: GateResult; liveThreeMove: GateResult; fiveClassRelease: GateResult };
 };
 
 export function validateManifest(value: unknown): ValidationManifest {
@@ -40,12 +42,21 @@ export function selectSplit(manifest: ValidationManifest, split: ValidationSplit
   return manifest.clips.filter((clip) => clip.split === split);
 }
 
-export function evaluateGates(labels: ExpectedMove[], controlledMetrics: EvaluationMetrics, releaseMetrics: EvaluationMetrics = controlledMetrics) {
+export function parseMoveSelection(value: string, fallback: MoveName[] = CONTROLLED_MOVE_NAMES) {
+  if (!value.trim()) return [...fallback];
+  const moves = Array.from(new Set(value.split(",").map((move) => move.trim()).filter(Boolean))) as MoveName[];
+  if (!moves.length || moves.some((move) => !ALL_MOVE_NAMES.includes(move))) throw new Error(`Invalid move selection: ${value}`);
+  return moves;
+}
+
+export function evaluateGates(labels: ExpectedMove[], controlledMetrics: EvaluationMetrics, liveMetrics: EvaluationMetrics = controlledMetrics, releaseMetrics: EvaluationMetrics = liveMetrics) {
   const represented = new Set(labels.map((label) => label.move));
   const controlled = CONTROLLED_MOVE_NAMES.every((move) => represented.has(move));
+  const liveThree = LIVE_MOVE_NAMES.every((move) => represented.has(move));
   const allFive = ALL_MOVE_NAMES.every((move) => represented.has(move));
   return {
     controlledTwoClass: controlled ? { status: controlledMetrics.meets95Percent ? "pass" : "fail", reason: "Evaluation set contains both controlled classes; gate uses only controlled-class predictions." } as GateResult : { status: "blocked", reason: "Evaluation set must contain behind-the-back and between-the-legs labels." } as GateResult,
+    liveThreeMove: liveThree ? { status: liveMetrics.meets95Percent ? "pass" : "fail", reason: "Evaluation set contains crossover, between-the-legs, and behind-the-back; gate uses those three classes." } as GateResult : { status: "blocked", reason: "Evaluation set must contain crossover, between-the-legs, and behind-the-back labels." } as GateResult,
     fiveClassRelease: allFive ? { status: releaseMetrics.meets95Percent ? "pass" : "fail", reason: "Evaluation set contains all five move classes." } as GateResult : { status: "blocked", reason: "Independent labeled evaluation data do not cover all five move classes." } as GateResult,
   };
 }

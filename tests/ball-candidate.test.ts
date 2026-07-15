@@ -44,3 +44,9 @@ test("pose prior does not discount a generic sports-ball model result", () => {
   const model = { point: { x: 0.9, y: 0.95 }, confidence: 0.8, source: "detected" as const };
   assert.deepEqual(applyPoseBallPrior(model, pose()), model);
 });
+
+test("pose prior favors a full color component over a tiny hand fragment", () => {
+  const fullBall = applyPoseBallPrior({ point: { x: 0.58, y: 0.58 }, confidence: 0.6, source: "color", apparentSize: 0.055 }, pose());
+  const tinyFragment = applyPoseBallPrior({ point: { x: 0.58, y: 0.58 }, confidence: 0.6, source: "color", apparentSize: 0.009 }, pose());
+  assert.ok(fullBall.confidence > tinyFragment.confidence * 5);
+});

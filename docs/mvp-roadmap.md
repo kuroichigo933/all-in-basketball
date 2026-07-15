@@ -16,7 +16,9 @@ This roadmap is ordered by product risk and validation value. The front-facing l
 - A complete predeclared 60-frame calibration protocol with 56 visible boxes and four separately scored full occlusions.
 - Two coherent frames for automatic cold acquisition/reacquisition, plus a versioned custom-model artifact verifier.
 - Export-time rejection of incomplete cadence and decoded-frame drift above 50 ms, matching evaluator checks.
-- Last complete regression run: 78/78 tests, strict type-check, synthetic benchmark, production build, and expanded live-camera smoke test pass.
+- Calibration-only YOLO detector-dataset export with holdout isolation, local-path confinement, provenance, occlusion exclusion, and difficult-partial auditing. Current export: 54 eligible positives, two difficult positives, four occlusions, and no negatives.
+- Pre-association candidate snapshots, candidate-oracle evaluation, deterministic tracker replay, and a 48-configuration calibration-only association search. The mixed slice improved from 0.382979 baseline ball F1 to 0.680851, but candidate-oracle recall is only 0.913043.
+- Latest mixed-video regression run: 97/97 tests, strict type-check, synthetic benchmark, and production build pass. Browser observation cadence passed; the expanded live-camera smoke test was not rerun in this cycle.
 
 ## Priority 1 - establish ball identity, not just coverage
 

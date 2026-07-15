@@ -1,7 +1,7 @@
 import type { Point } from "./types.ts";
 
 export type NormalizedBounds = { left: number; top: number; right: number; bottom: number };
-export type ColorBallCandidate = { center: Point; confidence: number; pixels: number };
+export type ColorBallCandidate = { center: Point; confidence: number; pixels: number; apparentSize: number };
 
 export function detectOrangeBallPixelCandidates(
   rgba: Uint8ClampedArray,
@@ -38,8 +38,10 @@ export function detectOrangeBallPixelCandidates(
     const fill = pixels / (boxWidth * boxHeight); if (aspect < 0.45 || fill < 0.28) continue;
     const center = { x: sumX / pixels / width, y: sumY / pixels / height };
     const continuity = previous ? Math.max(0, 1 - Math.hypot(center.x - previous.x, center.y - previous.y) * 3) : 0.5;
+    const apparentSize = Math.sqrt(pixels / (width * height));
     const sizeScore = Math.min(1, pixels / 45); const score = aspect * 0.3 + fill * 0.25 + continuity * 0.3 + sizeScore * 0.15;
-    candidates.push({ candidate: { center, confidence: Math.min(0.72, Math.max(0.12, score * 0.72)), pixels }, score });
+    candidates.push({ candidate: { center, confidence: Math.min(0.72, Math.max(0.12, score * 0.72)), pixels,
+      apparentSize }, score });
   }
   return candidates.sort((a, b) => b.score - a.score || b.candidate.pixels - a.candidate.pixels)
     .slice(0, Math.max(0, maximumCandidates)).map(({ candidate }) => candidate);
@@ -96,16 +98,18 @@ export function detectMovingBallPixelCandidates(
     const boxWidth = maxX - minX + 1; const boxHeight = maxY - minY + 1; const aspect = Math.min(boxWidth, boxHeight) / Math.max(boxWidth, boxHeight);
     const fill = pixels / (boxWidth * boxHeight); if (aspect < 0.42 || fill < 0.22) continue;
     const center = { x: sumX / pixels / width, y: sumY / pixels / height };
-    const continuity = previous ? Math.max(0, 1 - Math.hypot(center.x - previous.x, center.y - previous.y) * 3.5) : 0.35;
     let borderLuminance = 0; let borderPixels = 0;
     for (let y = Math.max(top, minY - 2); y <= Math.min(bottom, maxY + 2); y += 1) for (let x = Math.max(left, minX - 2); x <= Math.min(right, maxX + 2); x += 1) {
       if (x >= minX && x <= maxX && y >= minY && y <= maxY) continue; const offset = (y * width + x) * 4;
       borderLuminance += rgba[offset] * 0.299 + rgba[offset + 1] * 0.587 + rgba[offset + 2] * 0.114; borderPixels += 1;
     }
     const contrast = borderPixels ? Math.min(1, Math.abs(sumLuminance / pixels - borderLuminance / borderPixels) / 80) : 0;
+    const continuity = previous ? Math.max(0, 1 - Math.hypot(center.x - previous.x, center.y - previous.y) * 3.5) : 0.35;
+    const apparentSize = Math.sqrt(pixels / (width * height));
     const sizeScore = Math.exp(-0.5 * (Math.log(pixels / 70) / 1.1) ** 2);
     const score = aspect * 0.2 + fill * 0.12 + continuity * 0.2 + sizeScore * 0.24 + contrast * 0.24;
-    candidates.push({ candidate: { center, confidence: Math.min(0.68, Math.max(0.1, score * 0.7)), pixels }, score });
+    candidates.push({ candidate: { center, confidence: Math.min(0.68, Math.max(0.1, score * 0.7)), pixels,
+      apparentSize }, score });
   }
   return candidates.sort((a, b) => b.score - a.score || b.candidate.pixels - a.candidate.pixels)
     .slice(0, Math.max(0, maximumCandidates)).map(({ candidate }) => candidate);

@@ -8,7 +8,7 @@ Frames must meet pose and ball-confidence thresholds. Lateral moves require meas
 
 ## Current rules
 
-- **Crossover:** measured endpoints change sides across the player's hip centerline within the configured transition window, exceed body-relative and screen-space travel thresholds, and remain near a wrist.
+- **Crossover:** measured endpoints change sides across the player's hip centerline within the configured transition window, exceed body-relative and screen-space travel thresholds, and remain near a wrist. A second pose-supported path requires measured control to switch wrists across the centerline, persist for multiple frames, and stay outside the knee corridor.
 - **Between-the-legs:** a lateral transfer enters the knee corridor below the hips, or the controlling wrist changes while a measured ball stays near the receiving wrist and stance evidence supports the between-the-legs path.
 - **Behind-the-back:** a lateral transfer crosses in a hip-height band while avoiding the lower between-knee region, or a pose-supported wrist transfer has the narrower stance associated with a behind-the-back action.
 - **Hesitation:** visible approach motion is followed by a sustained low-travel interval near a wrist. A stationary hold alone is not sufficient.
@@ -42,3 +42,9 @@ The latest controlled calibration result on the real two-class cohort is:
 The controlled gate requires both behind-the-back and between-the-legs to be represented and requires micro precision and recall of at least 0.95 on holdout data. The prior configuration was evaluated on holdout exactly once and failed. Identity-safe reacquisition was subsequently evaluated on calibration only; those consumed holdout labels were not rerun or used as feedback. The five-class release gate remains blocked until independent holdout labels exist for crossover, hesitation, and in-and-out as well.
 
 Synthetic tests verify rule mechanics but do not count as accuracy evidence. No 95% claim is warranted by the current results.
+
+### Mixed three-move calibration cohort
+
+The first 84 seconds of the local mixed recording contain 30 crossover, 19 between-the-legs, and 22 behind-the-back labels. All five segments are calibration data because tracker changes and configuration selection used this source. After ball-association replay tuning and a 243-configuration move search, live-three precision is 0.430769, recall 0.394366, and F1 0.411765. Between-the-legs recall is 0.894737, while crossover recall is 0.200000 and behind-the-back recall is 0.227273. The rolling detector still cannot reliably count the rapid half-second sequences while ball identity and 2D depth evidence are unstable.
+
+The evaluator reports `liveThreeTotal` separately from global five-class output. Predictions of hesitation or in-and-out no longer contaminate the live-three gate, while they remain visible in the global report. The live-three gate failed and cannot become release evidence until a new untouched labeled recording is evaluated once.

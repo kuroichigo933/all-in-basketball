@@ -185,8 +185,10 @@ export default function AITracker() {
     olderFramePixelsRef.current = previousFramePixelsRef.current;
     previousFramePixelsRef.current = pixels;
     return [
-      ...orange.map((candidate) => ({ point: candidate.center, confidence: candidate.confidence, source: "color" as const })),
-      ...moving.map((candidate) => ({ point: candidate.center, confidence: candidate.confidence, source: "motion" as const })),
+      ...orange.map((candidate) => ({ point: candidate.center, confidence: candidate.confidence, source: "color" as const,
+        apparentSize: candidate.apparentSize })),
+      ...moving.map((candidate) => ({ point: candidate.center, confidence: candidate.confidence, source: "motion" as const,
+        apparentSize: candidate.apparentSize })),
     ].map((measurement) => applyPoseBallPrior(measurement, points));
   }
 
@@ -204,13 +206,18 @@ export default function AITracker() {
     }
     const modelMeasurements: BallMeasurement[] = objectsRef.current!.detectForVideo(objectInput, inferenceTimestamp)
       .map((candidate) => ({ point: crop ? mapPointFromCrop(candidate.point, crop) : candidate.point,
-        confidence: candidate.confidence, source: "detected" as const, detectorId: candidate.detectorId }));
+        confidence: candidate.confidence, source: "detected" as const, detectorId: candidate.detectorId,
+        apparentSize: crop ? candidate.apparentSize * Math.sqrt(crop.width * crop.height) : candidate.apparentSize }));
     const poseConfidence = points.length ? points.reduce((sum, point) => sum + (point.visibility ?? 1), 0) / points.length : 0;
     const measurements = detectVisualBalls(video, points);
     measurements.push(...modelMeasurements);
     const ballTrack = onlineBallTrackerRef.current.update(timeMs, measurements); const ball = ballTrack?.point ?? null;
     const ballConfidence = ballTrack?.confidence ?? 0; previousBallRef.current = ball;
     const observation: MotionObservation = { timeMs, poseConfidence, ballConfidence, ball, ballSource: ballTrack?.source ?? "missing", ballMeasured: Boolean(ballTrack && !ballTrack.predicted), ballMeasurement: ballTrack?.measurementPoint, ballDetectorId: ballTrack?.detectorId,
+      ballMeasurementSize: ballTrack?.apparentSize,
+      ballCandidates: measurements.map((measurement) => ({ point: { ...measurement.point }, confidence: measurement.confidence,
+        source: measurement.source as "detected" | "color" | "motion", detectorId: measurement.detectorId,
+        apparentSize: measurement.apparentSize })),
       leftShoulder: landmark(points, 11), rightShoulder: landmark(points, 12), leftWrist: landmark(points, 15), rightWrist: landmark(points, 16),
       leftHip: landmark(points, 23), rightHip: landmark(points, 24), leftKnee: landmark(points, 25), rightKnee: landmark(points, 26) };
     return { observation, points };

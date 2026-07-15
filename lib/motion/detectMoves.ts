@@ -228,6 +228,57 @@ export function detectMoves(observations: MotionObservation[], config: MoveDetec
     lastPoseTransferMs = observation.timeMs;
   }
 
+  // Crossovers often keep the ball above or outside the knee corridor, so the
+  // corridor-only handoff rule cannot see them. Track measured ball control at
+  // either wrist and emit a crossover when control changes on consecutive
+  // frames, the receiving hand remains outside the knee corridor, and the new
+  // hand persists long enough to reject a one-frame pose wobble.
+  const controllingHands = usable.map((observation): "left" | "right" | null => {
+    if (!isMeasuredBall(observation)) return null;
+    const leftDistance = distance(observation.ball!, observation.leftWrist);
+    const rightDistance = distance(observation.ball!, observation.rightWrist);
+    const width = torsoWidth(observation);
+    if (Math.min(leftDistance, rightDistance) > width * config.handProximityHipWidths) return null;
+    return leftDistance <= rightDistance ? "left" : "right";
+  });
+  const wristInKneeCorridor = (observation: MotionObservation, hand: "left" | "right") => {
+    const wrist = hand === "left" ? observation.leftWrist : observation.rightWrist;
+    const hipBottom = Math.max(observation.leftHip.y, observation.rightHip.y);
+    const kneeBottom = Math.max(observation.leftKnee.y, observation.rightKnee.y);
+    const kneeLeft = Math.min(observation.leftKnee.x, observation.rightKnee.x);
+    const kneeRight = Math.max(observation.leftKnee.x, observation.rightKnee.x);
+    return wrist.x > kneeLeft && wrist.x < kneeRight && wrist.y > hipBottom && wrist.y < kneeBottom;
+  };
+  let previousControlHand: "left" | "right" | null = null;
+  let lastCrossoverTransferMs = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < usable.length; index += 1) {
+    const activeHand = controllingHands[index];
+    if (!activeHand) continue;
+    if (!previousControlHand) { previousControlHand = activeHand; continue; }
+    if (activeHand === previousControlHand) continue;
+    const previousObservation = usable[index - 1]; const previousFrameHand = controllingHands[index - 1];
+    previousControlHand = activeHand;
+    const observation = usable[index];
+    if (!previousObservation || previousFrameHand === null || previousFrameHand === activeHand ||
+      observation.timeMs - previousObservation.timeMs > config.maximumObservationGapMs ||
+      observation.timeMs - lastCrossoverTransferMs < config.poseTransferCooldownMs ||
+      wristInKneeCorridor(observation, activeHand)) continue;
+    const width = torsoWidth(observation);
+    const previousBallOffset = (previousObservation.ball!.x - centerX(previousObservation)) / width;
+    const currentBallOffset = (observation.ball!.x - centerX(observation)) / width;
+    const crossedBody = Math.sign(previousBallOffset) !== Math.sign(currentBallOffset) &&
+      Math.abs(previousBallOffset) > config.centerlineMarginHipWidths && Math.abs(currentBallOffset) > config.centerlineMarginHipWidths;
+    if (!crossedBody || Math.abs(observation.ball!.x - previousObservation.ball!.x) < config.minimumScreenLateralTravel ||
+      Math.abs(centerX(observation) - centerX(previousObservation)) / width > config.poseTransferMaximumTorsoTravelHipWidths) continue;
+    const confirmations = controllingHands.slice(index).filter((hand, relativeIndex) =>
+      usable[index + relativeIndex].timeMs - observation.timeMs <= config.poseTransferConfirmationMs && hand === activeHand).length;
+    if (confirmations < 2) continue;
+    addIfDistinct(found, { move: "crossover", startMs: Math.max(0, observation.timeMs - 200), endMs: observation.timeMs + 200,
+      confidence: clamp(0.48 + Math.min(observation.poseConfidence, observation.ballConfidence) * 0.3),
+      evidence: ["measured ball control changed between wrists", "receiving hand remained outside the knee corridor", "receiving hand control persisted"] });
+    lastCrossoverTransferMs = observation.timeMs;
+  }
+
   for (let i = 4; i < usable.length; i += 1) {
     const window = usable.slice(i - 4, i + 1);
     const [a, , middle, , e] = window;

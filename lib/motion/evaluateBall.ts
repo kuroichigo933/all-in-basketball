@@ -14,7 +14,7 @@ export type BallIdentityLabel =
 export type BallOcclusionLabel = { timeMs: number; visibility: "occluded" };
 export type BallIdentityEvaluationLabel = BallIdentityLabel | BallOcclusionLabel;
 
-export type BallIdentityObservation = Pick<MotionObservation, "timeMs" | "ball" | "ballSource" | "ballMeasurement" | "ballDetectorId"> & {
+export type BallIdentityObservation = Pick<MotionObservation, "timeMs" | "ball" | "ballSource" | "ballMeasurement" | "ballDetectorId" | "ballCandidates"> & {
   /** True only when this frame supplied a detector measurement, false for tracker prediction. */
   ballMeasured?: boolean;
 };
@@ -55,6 +55,17 @@ export type BallOcclusionMetrics = {
 export type BallIdentityReport = {
   tracked: BallIdentityMetrics;
   raw: BallIdentityMetrics | null;
+  candidateOracle: {
+    available: boolean;
+    visibleLabels: number;
+    visibleHits: number;
+    visibleRecall: number | null;
+    absentLabels: number;
+    absentFramesWithoutCandidates: number;
+    negativeRejectionRate: number | null;
+    medianNearestCenterErrorRadii: number | null;
+    p95NearestCenterErrorRadii: number | null;
+  };
   occlusion: BallOcclusionMetrics;
   timing: {
     toleranceMs: number;
@@ -240,6 +251,29 @@ function scoreOcclusions(matches: LabelObservationMatch[]): BallOcclusionMetrics
   };
 }
 
+function scoreCandidateOracle(matches: LabelObservationMatch[], maximumCenterErrorRadii: number): BallIdentityReport["candidateOracle"] {
+  const scored = matches.filter(({ label }) => label.visibility !== "occluded");
+  const available = scored.every(({ observation }) => !observation || Array.isArray(observation.ballCandidates));
+  const visible = scored.filter(({ label }) => label.visibility === "visible");
+  const absent = scored.filter(({ label }) => label.visibility === "absent");
+  if (!available) return { available: false, visibleLabels: visible.length, visibleHits: 0, visibleRecall: null,
+    absentLabels: absent.length, absentFramesWithoutCandidates: 0, negativeRejectionRate: null,
+    medianNearestCenterErrorRadii: null, p95NearestCenterErrorRadii: null };
+  const nearestErrors: number[] = [];
+  let visibleHits = 0;
+  for (const { label, observation } of visible) {
+    if (label.visibility !== "visible" || !observation?.ballCandidates?.length) continue;
+    const nearest = Math.min(...observation.ballCandidates.map((candidate) => centerErrorRadii(candidate.point, label.box)));
+    nearestErrors.push(nearest); if (nearest <= maximumCenterErrorRadii) visibleHits += 1;
+  }
+  const absentFramesWithoutCandidates = absent.filter(({ observation }) => !observation?.ballCandidates?.length).length;
+  nearestErrors.sort((a, b) => a - b);
+  return { available, visibleLabels: visible.length, visibleHits, visibleRecall: visible.length ? visibleHits / visible.length : null,
+    absentLabels: absent.length, absentFramesWithoutCandidates,
+    negativeRejectionRate: absent.length ? absentFramesWithoutCandidates / absent.length : null,
+    medianNearestCenterErrorRadii: percentile(nearestErrors, 0.5), p95NearestCenterErrorRadii: percentile(nearestErrors, 0.95) };
+}
+
 export function evaluateBallIdentity(
   unvalidatedLabels: unknown,
   observations: BallIdentityObservation[],
@@ -257,6 +291,7 @@ export function evaluateBallIdentity(
   const rawMetricsAvailable = explicitlyClassifiedBallObservations === ballObservations;
   const tracked = scoreMatches(matches, (observation) => observation.ball, maximumCenterErrorRadii);
   const raw = rawMetricsAvailable ? scoreMatches(matches, (observation) => observation.ballMeasured ? observation.ballMeasurement ?? null : null, maximumCenterErrorRadii) : null;
+  const candidateOracle = scoreCandidateOracle(matches, maximumCenterErrorRadii);
   const occlusion = scoreOcclusions(matches);
   const matchedOffsets = matches.flatMap(({ offsetMs }) => offsetMs === null ? [] : [offsetMs]);
   const unmatchedLabels = matches.filter(({ observation }) => observation === null).length;
@@ -269,7 +304,7 @@ export function evaluateBallIdentity(
   const sources = countBy(ordered.map((observation) => observation.ballSource ?? "unknown"));
   const detectors = countBy(ordered.flatMap((observation) => observation.ballDetectorId ? [observation.ballDetectorId] : []));
   return {
-    tracked, raw, occlusion,
+    tracked, raw, candidateOracle, occlusion,
     timing: {
       toleranceMs: timestampToleranceMs,
       matchedLabels: matches.length - unmatchedLabels,

@@ -34,6 +34,38 @@ npm run validate:moves -- --manifest validation/manifest.json --split calibratio
 # The current holdout has already been evaluated once; do not tune against it.
 ```
 
+## Mixed front-camera calibration video (first 84 seconds)
+
+The first 84 seconds of the locally supplied `Video AI Movement Test.mov` were converted to five 8-bit H.264, 720p30, audio-free segments. The cleaned CSV contributes 71 non-overlapping repetitions: 30 crossover, 19 between-the-legs, and 22 behind-the-back. No labeled event crosses a segment boundary. The source, cleaned CSV, segments, manifest, observations, ball sidecars, and tuned configuration remain ignored under `validation/local/` or `validation/observations/`.
+
+This entire source is a **calibration cohort**. Tracker changes and threshold selection used its labels, so none of its segments are valid untouched holdout evidence. A new recording is required for the live three-move release evaluation.
+
+| Metric | Calibration result |
+|---|---:|
+| Segments / move labels | 5 / 71 |
+| Pose / measured-ball / tracked-ball coverage | 0.916418 / 0.959301 / 0.991142 |
+| Three-move precision / recall / F1 | 0.430769 / 0.394366 / 0.411765 |
+| Crossover precision / recall / F1 | 0.333333 / 0.200000 / 0.250000 |
+| Between-the-legs precision / recall / F1 | 0.425000 / 0.894737 / 0.576271 |
+| Behind-the-back precision / recall / F1 | 0.714286 / 0.227273 / 0.344828 |
+| Live three-move 95% gate | Failed |
+| Five-class release gate | Blocked |
+
+The predeclared ball-identity slice contains 23 visible boxes, one absent-ball negative, and one full occlusion. It measured tracked and raw precision 0.666667, recall 0.695652, and F1 0.680851. The candidate oracle found a correctly localized candidate at 21/23 visible labels (0.913043 recall), while the absent frame still contained candidates. The occluded timestamp matched a measured candidate, not a prediction. Thus 99.1% tracked coverage does not imply correct ball identity, and even perfect association cannot reach 95% with the current candidate set.
+
+The final tracker records complete pre-association candidate snapshots, demotes tiny color/motion fragments, weights full-ball components, and permits an immediate override from a calibration-selected learned detection of plausible size. A 48-configuration replay search raised ball F1 from a no-override baseline of 0.382979 to 0.680851. Move F1 breaks exact ball-score ties, selecting a 0.045 minimum apparent-size floor that preserves ball F1 and avoids needless trajectory damage. This still cannot make the generic `sports ball` model reliable. Calibration-only move-threshold search over 243 configurations remains far below 95%, so additional threshold tuning is not the remedy.
+
+Reproduce the local workflow with:
+
+```bash
+npm run validation:prepare -- --input "validation/local/Video AI Movement Test.mov" --id mixed-moves-01 --move mixed --duration-seconds 84
+npm run validation:import-mixed -- --csv validation/local/video-ai-movement-timestamps-clean.csv --source-id mixed-moves-01 --cohort controlled-front-camera-mixed-2026-07 --duration-seconds 84
+npm run validation:tune -- --manifest validation/local/manifests/mixed-moves-01.json --moves crossover,between-the-legs,behind-the-back --output validation/local/mixed-moves-01-tuned-config.json
+npm run validation:tune-ball -- --manifest validation/local/manifests/mixed-moves-01.json --output validation/local/tuned-ball-tracker.json
+npm run validate:moves -- --manifest validation/local/manifests/mixed-moves-01.json --split calibration --config validation/local/mixed-moves-01-tuned-config.json
+npm run validation:ball -- --manifest validation/local/manifests/mixed-moves-01.json --split calibration
+```
+
 ## Ball-identity slice
 
 Coverage alone cannot show that the tracker selected the basketball rather than a hand, shorts, knee, foot, or moving shadow. The upload analyzer therefore supports independent tight ball boxes and explicit no-ball labels, and `validation:ball` measures localization in annotated ball radii. Labels live in tracked sidecars under `validation/labels/ball/`, while ignored observations may be regenerated freely. The evaluator fails incomplete protocols unless `--allow-incomplete` is explicitly supplied for diagnostics.
@@ -53,6 +85,8 @@ The current default pipeline produced:
 | True absent-ball labels | 0 |
 
 High observation coverage therefore concealed wrong-object tracking in 32 of the 56 visible adjudicated frames. The default generic model supplied only 12 selected learned detections across 873 exported observations; color and motion heuristics supplied most measurements.
+
+The calibration labels can now be reproduced as a local YOLO detector package with `validation:ball-dataset`. The current export contains 54 training-eligible positive frames, two tiny partial positives retained separately for audit, four excluded full occlusions, and zero true absent-ball negatives. It is a pipeline fixture, not a sufficient training or validation dataset.
 
 An EfficientDet-Lite2 diagnostic increased learned detections and reached tracked F1 0.428571 and raw F1 0.446429, but its maximum decoded-frame offset was 166.667 ms. The 50 ms cadence gate correctly rejects that export, so Lite2 was not adopted and its scores are not valid tuning evidence.
 
@@ -79,6 +113,6 @@ These are pipeline and coverage diagnostics only. A track existing in a frame do
 
 ## Verification status
 
-The last complete automated run passed 78/78 tests, strict TypeScript, the synthetic move benchmark, the production build, and the expanded live-camera smoke test. Synthetic detector runtime and unit fixtures are useful regressions but are not real-video accuracy evidence.
+The latest mixed-video implementation run passed 97/97 tests, strict TypeScript, the synthetic move benchmark, and the production build. All five browser observation exports passed the sampling-cadence gates. The separate expanded live-camera smoke test was not rerun in this cycle. Synthetic detector runtime and unit fixtures are useful regressions but are not real-video accuracy evidence.
 
-Last documented calibration run: 2026-07-13. Results apply only to the controlled frontal-view recordings described above.
+Latest documented mixed calibration run: 2026-07-14. Results apply only to the controlled frontal-view recordings described above.

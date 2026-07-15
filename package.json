@@ -10,8 +10,11 @@
     "benchmark": "node --experimental-strip-types scripts/benchmark-moves.ts",
     "validate:moves": "node --experimental-strip-types scripts/evaluate-validation.ts",
     "validation:prepare": "node --experimental-strip-types scripts/prepare-validation.ts",
+    "validation:import-mixed": "node --experimental-strip-types scripts/import-mixed-validation.ts",
     "validation:tune": "node --experimental-strip-types scripts/tune-validation.ts",
+    "validation:tune-ball": "node --experimental-strip-types scripts/tune-ball-tracker.ts",
     "validation:ball": "node --experimental-strip-types scripts/evaluate-ball-validation.ts",
+    "validation:ball-dataset": "node --experimental-strip-types scripts/export-ball-dataset.ts",
     "ball-model:verify": "node --experimental-strip-types scripts/verify-ball-model-artifact.ts",
     "migrate": "node scripts/migrate.mjs",
     "start": "next start"

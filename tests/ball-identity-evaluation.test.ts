@@ -106,3 +106,17 @@ test("validates normalized boxes and unique timestamps", () => {
   assert.deepEqual(validateBallIdentityEvaluationLabels([{ timeMs: 200, visibility: "occluded" }, { timeMs: 100, visibility: "absent" }, visible(0)]).map((label) => label.timeMs), [0, 100, 200]);
   assert.throws(() => validateBallIdentityLabels([{ timeMs: 0, visibility: "occluded" }]), /visible or absent/);
 });
+
+test("reports candidate-set oracle recall separately from the selected track", () => {
+  const wrongTrack: BallIdentityObservation = {
+    ...observation(0, 0.8),
+    ballCandidates: [
+      { point: { x: 0.8, y: 0.5 }, confidence: 0.8, source: "motion" },
+      { point: { x: 0.4, y: 0.5 }, confidence: 0.5, source: "color" },
+    ],
+  };
+  const report = evaluateBallIdentity([visible(0)], [wrongTrack]);
+  assert.equal(report.tracked.recall, 0);
+  assert.equal(report.candidateOracle.available, true);
+  assert.equal(report.candidateOracle.visibleRecall, 1);
+});

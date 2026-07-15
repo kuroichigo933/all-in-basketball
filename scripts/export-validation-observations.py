@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 from playwright.async_api import async_playwright
@@ -9,6 +10,7 @@ VIDEOS = ROOT / "validation" / "local" / "videos"
 OUTPUT = ROOT / "validation" / "observations"
 FORCE = "--force" in sys.argv
 FILTERS = {argument for argument in sys.argv[1:] if not argument.startswith("--")}
+BASE_URL = os.environ.get("VALIDATION_BASE_URL", "http://127.0.0.1:3000").rstrip("/")
 
 async def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -18,7 +20,7 @@ async def main():
         videos = sorted(VIDEOS.rglob("*.mp4"))
         if FILTERS:
             videos = [video for video in videos if video.stem in FILTERS]
-        await page.goto("http://127.0.0.1:3000/validation-runner", wait_until="domcontentloaded", timeout=60_000)
+        await page.goto(f"{BASE_URL}/validation-runner", wait_until="domcontentloaded", timeout=60_000)
         await page.wait_for_timeout(2_000)
         await page.get_by_role("button", name="Upload benchmark").click()
         video_input = page.locator('input[accept^="video/"]')

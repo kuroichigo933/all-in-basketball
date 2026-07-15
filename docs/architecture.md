@@ -58,6 +58,7 @@ Move-label annotation and ball-identity annotation are independent of detector o
 
 - Move labels store exact start/end intervals and can be edited or deleted while raw detections remain visible for comparison.
 - Ball labels store a tight normalized box, a temporary full-occlusion state, or a true no-ball-in-scene state. Occlusions are reported separately as tracker prediction persistence and never counted as visible localization or absent-ball rejection. Versioned sidecars are separate from ignored detector observations; the UI imports/exports them, snaps times to 100 ms, and navigates predeclared schedules.
+- `validation:ball-dataset` converts calibration sidecars into ignored YOLO frames and labels for basketball-detector development. It refuses holdout export, excludes occlusions, preserves true absent frames as empty negative labels, separates tiny partial positives for audit, and retains source provenance for future source-disjoint partitioning.
 - Exports preserve labels and predictions as separate fields.
 
 `lib/motion/` contains pure tracking, move detection, sampling validation, event evaluation, and ball-identity evaluation. `scripts/tune-validation.ts` reads calibration clips only. `scripts/evaluate-validation.ts` reports controlled and five-class gates by split. `scripts/evaluate-ball-validation.ts` reports tracked and, when provenance is complete, raw-measurement identity metrics.

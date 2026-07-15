@@ -6,7 +6,7 @@ import type { ExpectedMove } from "../lib/motion/evaluate.ts";
 import type { AnalysisSummary } from "../lib/motion/types.ts";
 import { trackBallContinuity } from "../lib/motion/trackBall.ts";
 import { assertUsableSampling } from "../lib/motion/sampling.ts";
-import { ALL_MOVE_NAMES, CONTROLLED_MOVE_NAMES, evaluateGates, selectSplit, validateManifest, type AnalysisExport, type ValidationSplit } from "../lib/motion/validation.ts";
+import { ALL_MOVE_NAMES, CONTROLLED_MOVE_NAMES, LIVE_MOVE_NAMES, evaluateGates, selectSplit, validateManifest, type AnalysisExport, type ValidationSplit } from "../lib/motion/validation.ts";
 
 function option(name: string, fallback?: string) { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : fallback; }
 const manifestPath = resolve(option("--manifest", "validation/manifest.json")!);
@@ -33,8 +33,9 @@ else {
     try { const data = JSON.parse(readFileSync(resolve(dirname(manifestPath), clip.observations), "utf8")) as AnalysisExport; assertUsableSampling(data.observations, data.sampleIntervalMs, data.sampling); return evaluateDetections(clip.expected.filter((e) => e.move === move), detectMoves(trackBallContinuity(data.observations), config).filter((d) => d.move === move), manifest.toleranceMs); } catch { return { truePositives: 0, falsePositives: 0, falseNegatives: clip.expected.filter((e) => e.move === move).length }; }
   }))]));
   const controlledTotal = combineEvaluations(CONTROLLED_MOVE_NAMES.map((move) => byClass[move]));
+  const liveThreeTotal = combineEvaluations(LIVE_MOVE_NAMES.map((move) => byClass[move]));
   const average = (key: "poseCoverage" | "detectedBallCoverage" | "ballCoverage") => summaries.length ? summaries.reduce((sum, item) => sum + item[key], 0) / summaries.length : 0;
-  const report = { split, clips: clips.length, processed: rows.length, failures, total, controlledTotal, byClass, coverage: { pose: average("poseCoverage"), detectedBall: average("detectedBallCoverage"), trackedBall: average("ballCoverage") }, gates: evaluateGates(labels, controlledTotal, total) };
+  const report = { split, clips: clips.length, processed: rows.length, failures, total, controlledTotal, liveThreeTotal, byClass, coverage: { pose: average("poseCoverage"), detectedBall: average("detectedBallCoverage"), trackedBall: average("ballCoverage") }, gates: evaluateGates(labels, controlledTotal, liveThreeTotal, total) };
   console.log(JSON.stringify(report, null, 2));
-  if (failures.length || report.gates.controlledTwoClass.status !== "pass") process.exitCode = 1;
+  if (failures.length || report.gates.controlledTwoClass.status === "fail" || report.gates.liveThreeMove.status === "fail") process.exitCode = 1;
 }

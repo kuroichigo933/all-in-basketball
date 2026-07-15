@@ -89,3 +89,31 @@ test("alternating distant automatic candidates never confirm an identity", () =>
   assert.equal(tracker.update(200, [{ point: { x: 0.1, y: 0.5 }, confidence: 0.8, source: "motion" }]), null);
   assert.equal(tracker.update(300, [{ point: { x: 0.9, y: 0.5 }, confidence: 0.8, source: "motion" }]), null);
 });
+
+test("switches from a stale heuristic lock after two coherent learned detections", () => {
+  const tracker = new OnlineBallTracker(500, 3.5, { immediateDetectedMinimumConfidence: Number.POSITIVE_INFINITY });
+  tracker.seed(0, { x: 0.2, y: 0.5 });
+  assert.ok(tracker.update(100, [
+    { point: { x: 0.21, y: 0.5 }, confidence: 0.6, source: "motion", apparentSize: 0.01 },
+    { point: { x: 0.7, y: 0.5 }, confidence: 0.7, source: "detected", apparentSize: 0.05 },
+  ])!.point.x < 0.3);
+  const switched = tracker.update(200, [
+    { point: { x: 0.22, y: 0.5 }, confidence: 0.6, source: "motion", apparentSize: 0.01 },
+    { point: { x: 0.74, y: 0.52 }, confidence: 0.65, source: "detected", apparentSize: 0.05 },
+  ]);
+  assert.ok(switched); assert.equal(switched.source, "detected"); assert.ok(switched.point.x > 0.7);
+});
+
+test("optionally lets a strong ball-sized learned detection replace a stale lock immediately", () => {
+  const tracker = new OnlineBallTracker(500, 3.5, {
+    immediateDetectedMinimumConfidence: 0.3,
+    immediateDetectedMinimumSize: 0.04,
+    immediateDetectedMaximumSize: 0.09,
+  });
+  tracker.seed(0, { x: 0.2, y: 0.5 });
+  const result = tracker.update(100, [
+    { point: { x: 0.21, y: 0.5 }, confidence: 0.7, source: "motion", apparentSize: 0.02 },
+    { point: { x: 0.75, y: 0.55 }, confidence: 0.4, source: "detected", apparentSize: 0.06 },
+  ]);
+  assert.equal(result?.source, "detected"); assert.ok(result!.point.x > 0.7);
+});

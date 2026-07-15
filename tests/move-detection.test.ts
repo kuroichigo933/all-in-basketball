@@ -144,3 +144,24 @@ test("pose-supported transfer requires measured ball evidence at the wrist switc
   const poseOnly = { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10 };
   assert.deepEqual(detectMoves(transfer, poseOnly), []);
 });
+
+test("detects a pose-supported crossover when measured wrist control switches above the knee corridor", () => {
+  const transfer = [
+    { ...frame(0, 0.32, 0.42), ballSource: "detected" as const },
+    { ...frame(200, 0.68, 0.42), ballSource: "detected" as const },
+    { ...frame(350, 0.68, 0.42), ballSource: "detected" as const },
+  ];
+  const poseOnly = { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10 };
+  const crossover = detectMoves(transfer, poseOnly).find((move) => move.move === "crossover");
+  assert.ok(crossover); assert.match(crossover.evidence.join(" "), /control changed between wrists/);
+});
+
+test("pose-supported crossover rejects one-frame wrist-control wobble", () => {
+  const wobble = [
+    { ...frame(0, 0.32, 0.42), ballSource: "detected" as const },
+    { ...frame(200, 0.68, 0.42), ballSource: "detected" as const },
+    { ...frame(350, 0.32, 0.42), ballSource: "detected" as const },
+  ];
+  const poseOnly = { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10 };
+  assert.equal(detectMoves(wobble, poseOnly).some((move) => move.move === "crossover"), false);
+});

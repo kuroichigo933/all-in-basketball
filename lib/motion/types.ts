@@ -1,5 +1,13 @@
 export type Point = { x: number; y: number; z?: number; visibility?: number };
 
+export type BallCandidateObservation = {
+  point: Point;
+  confidence: number;
+  source: "detected" | "color" | "motion";
+  detectorId?: string;
+  apparentSize?: number;
+};
+
 export type MotionObservation = {
   timeMs: number;
   poseConfidence: number;
@@ -20,6 +28,10 @@ export type MotionObservation = {
   ballMeasurement?: Point;
   /** Model identifier when the accepted measurement came from a learned detector. */
   ballDetectorId?: string;
+  /** Square root of accepted candidate area divided by frame area, for identity diagnostics. */
+  ballMeasurementSize?: number;
+  /** All pose-adjusted candidates before temporal association, retained for validation replay. */
+  ballCandidates?: BallCandidateObservation[];
 };
 
 export type MoveName = "crossover" | "between-the-legs" | "behind-the-back" | "hesitation" | "in-and-out";

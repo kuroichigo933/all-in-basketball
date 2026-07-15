@@ -37,3 +37,5 @@ TensorFlow Lite FlatBuffers carry the `TFL3` identifier at bytes 4-7. The verifi
 ## Deliberate separation from runtime selection
 
 Passing this verifier never updates environment variables or changes `BrowserBallDetector`. Runtime activation is a separate reviewed change after license, evidence, browser compatibility, calibration, and independent validation have been assessed.
+
+Calibration labels can be exported for detector development with `npm run validation:ball-dataset -- --manifest validation/manifest.json --split calibration`. See `docs/ball-detector-dataset.md`. This package must not include holdout data and does not itself satisfy the artifact evaluation requirements.

@@ -34,5 +34,14 @@ export function applyPoseBallPrior(measurement: BallMeasurement, points: Point[]
   if (insideThighs && wristProximity < 0.65) multiplier *= 0.35;
   if (belowKnees && nearestKneeDistance < bodyScale * 0.5 && wristProximity < 0.5) multiplier *= 0.18;
   if (belowFeet) multiplier *= 0.12;
+  // Tiny hand, shoe, and clothing-edge components dominate false identities
+  // in portrait footage. Keep small motion crescents eligible for a black
+  // ball, but make a full-sized color component materially stronger.
+  if (measurement.apparentSize !== undefined) {
+    const sizeMultiplier = measurement.source === "color"
+      ? Math.max(0.12, Math.min(1, (measurement.apparentSize - 0.006) / 0.034))
+      : Math.max(0.25, Math.min(1, (measurement.apparentSize - 0.005) / 0.03));
+    multiplier *= sizeMultiplier;
+  }
   return { ...measurement, confidence: measurement.confidence * multiplier };
 }

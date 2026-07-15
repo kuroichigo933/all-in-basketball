@@ -61,10 +61,19 @@ for (const clip of clips) {
 const tracked = micro(reports.map(({ report }) => report.tracked));
 const rawReports = reports.flatMap(({ report }) => report.raw ? [report.raw] : []);
 const occlusion = microOcclusion(reports.map(({ report }) => report.occlusion));
+const oracleReports = reports.map(({ report }) => report.candidateOracle);
+const candidateOracle = oracleReports.length === reports.length && oracleReports.every((report) => report.available) ? (() => {
+  const visibleLabels = oracleReports.reduce((sum, report) => sum + report.visibleLabels, 0);
+  const visibleHits = oracleReports.reduce((sum, report) => sum + report.visibleHits, 0);
+  const absentLabels = oracleReports.reduce((sum, report) => sum + report.absentLabels, 0);
+  const absentFramesWithoutCandidates = oracleReports.reduce((sum, report) => sum + report.absentFramesWithoutCandidates, 0);
+  return { visibleLabels, visibleHits, visibleRecall: visibleLabels ? visibleHits / visibleLabels : null,
+    absentLabels, absentFramesWithoutCandidates, negativeRejectionRate: absentLabels ? absentFramesWithoutCandidates / absentLabels : null };
+})() : null;
 const complete = reports.length === clips.length && failures.length === 0 && incompleteProtocols.length === 0;
 console.log(JSON.stringify({
   split, clips: clips.length, labeledClips: reports.length, complete,
-  missingLabels, incompleteProtocols, failures, tracked, raw: rawReports.length === reports.length ? micro(rawReports) : null, occlusion,
+  missingLabels, incompleteProtocols, failures, tracked, raw: rawReports.length === reports.length ? micro(rawReports) : null, candidateOracle, occlusion,
   perClip: Object.fromEntries(reports.map(({ id, source, report }) => [id, { source, ...report }])),
 }, null, 2));
 if (!reports.length || failures.length || (!complete && !allowIncomplete)) process.exitCode = 1;

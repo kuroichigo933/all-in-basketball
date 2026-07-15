@@ -8,7 +8,7 @@ export const GENERIC_BALL_MODEL = {
 } as const;
 
 export type BallModelConfig = { id: string; assetPath: string; labels: string[]; custom: boolean };
-export type ModelBallCandidate = { point: Point; confidence: number; detectorId: string };
+export type ModelBallCandidate = { point: Point; confidence: number; detectorId: string; apparentSize: number };
 
 type DetectorInput = HTMLVideoElement | HTMLCanvasElement;
 type DetectionBackend = {
@@ -52,7 +52,8 @@ export class MediaPipeBallDetector implements BrowserBallDetector {
       const category = detection.categories[0]; const box = detection.boundingBox;
       if (!box || !category?.categoryName || !this.labels.has(category.categoryName.toLowerCase())) return [];
       return [{ point: { x: (box.originX + box.width / 2) / width, y: (box.originY + box.height / 2) / height },
-        confidence: category.score ?? 0, detectorId: this.id }];
+        confidence: category.score ?? 0, detectorId: this.id,
+        apparentSize: Math.sqrt((box.width / width) * (box.height / height)) }];
     }).sort((a, b) => b.confidence - a.confidence).slice(0, 3);
   }
 
