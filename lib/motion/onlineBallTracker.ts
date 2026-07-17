@@ -14,12 +14,19 @@ export type OnlineBallTrackerConfig = {
   immediateDetectedMinimumConfidence: number;
   immediateDetectedMinimumSize: number;
   immediateDetectedMaximumSize: number;
+  /** Motion candidates may challenge a stale identity only after two coherent frames. */
+  challengerMotionMinimumConfidence: number;
+  challengerMotionMinimumSize: number;
+  challengerColorMinimumConfidence: number;
 };
 
 export const DEFAULT_ONLINE_BALL_TRACKER_CONFIG: Readonly<OnlineBallTrackerConfig> = {
-  immediateDetectedMinimumConfidence: 0.15,
+  immediateDetectedMinimumConfidence: 0.1,
   immediateDetectedMinimumSize: 0.045,
   immediateDetectedMaximumSize: 0.09,
+  challengerMotionMinimumConfidence: 2,
+  challengerMotionMinimumSize: 0.025,
+  challengerColorMinimumConfidence: 0,
 };
 
 const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value));
@@ -42,9 +49,12 @@ const measurementQuality = (measurement: BallMeasurement) => {
   return measurement.confidence * sourceReliability[measurement.source] * identityBoost * detectedSizeMultiplier;
 };
 
-const canChallengeIdentity = (measurement: BallMeasurement) =>
+const canChallengeIdentity = (measurement: BallMeasurement, config: OnlineBallTrackerConfig) =>
   (measurement.source === "detected" && (measurement.apparentSize ?? 0) >= 0.025) ||
-  (measurement.source === "color" && (measurement.apparentSize ?? 0) >= 0.028);
+  (measurement.source === "color" && measurement.confidence >= config.challengerColorMinimumConfidence &&
+    (measurement.apparentSize ?? 0) >= 0.028) ||
+  (measurement.source === "motion" && measurement.confidence >= config.challengerMotionMinimumConfidence &&
+    (measurement.apparentSize ?? 0) >= config.challengerMotionMinimumSize);
 
 export class OnlineBallTracker {
   private point: Point | null = null;
@@ -125,7 +135,7 @@ export class OnlineBallTracker {
     // Only a learned detection or a full-sized color component may challenge
     // that identity, and it must be motion-coherent for two consecutive frames.
     const distantIdentityCandidates = measurements.filter((measurement) =>
-      canChallengeIdentity(measurement) &&
+      canChallengeIdentity(measurement, this.config) &&
       Math.hypot(measurement.point.x - predicted.x, measurement.point.y - predicted.y) > gate)
       .sort((a, b) => measurementQuality(b) - measurementQuality(a));
     if (this.challenger) {

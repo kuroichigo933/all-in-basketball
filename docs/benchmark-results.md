@@ -4,7 +4,7 @@
 
 Two supplied HEVC recordings were converted locally into nine browser-compatible, 20-second-or-shorter 720p30 H.264 segments: four behind-the-back and five between-the-legs. Every complete visible repetition was labeled independently of detector predictions, yielding 126 move intervals. Partial events crossing segment boundaries were excluded.
 
-Segments alternate chronologically between `calibration` and `holdout`. All observation exports passed the 100 ms cadence checks: no skipped sample slots, 100% declared sample coverage, maximum sample gap 100 ms, and maximum decoded-frame offset no greater than 33.333 ms. Calibration observations were regenerated for identity-safe reacquisition; the consumed holdout was not rerun.
+Segments alternate chronologically between `calibration` and `holdout`. All observation exports passed the 100 ms cadence checks: no skipped sample slots, 100% declared sample coverage, maximum sample gap 100 ms, and maximum decoded-frame offset no greater than 33.333 ms. The original holdout has now been consumed by regression checks and cannot support a future release claim.
 
 The latest calibration-only grid search selected a controlled two-class configuration with:
 
@@ -13,17 +13,17 @@ The latest calibration-only grid search selected a controlled two-class configur
 | Real segments in complete cohort | 9 |
 | Independent move labels | 126 |
 | Calibration labels | 55 |
-| Holdout labels | 71, evaluated once |
+| Holdout labels | 71, consumed regression data |
 | Current calibration precision / recall / F1 | 0.658537 / 0.490909 / 0.562500 |
 | Current between-the-legs precision / recall / F1 | 0.760000 / 0.542857 / 0.633333 |
 | Current behind-the-back precision / recall / F1 | 0.500000 / 0.400000 / 0.444444 |
-| Consumed holdout precision / recall / F1 (prior configuration) | 0.705882 / 0.507042 / 0.590164 |
+| Consumed holdout controlled precision / recall / F1 (hybrid defaults) | 0.705882 / 0.507042 / 0.590164 |
 | Consumed holdout between-the-legs F1 | 0.675676 |
 | Consumed holdout behind-the-back F1 | 0.458333 |
 | Controlled 95% gate | Failed |
 | Five-class release gate | Blocked: three classes lack labeled holdout coverage |
 
-The earlier configuration was selected from calibration only and the holdout was then evaluated exactly once. The current pipeline was subsequently measured and tuned on regenerated calibration observations only; the holdout was not rerun. Future release evidence needs a new independent validation round.
+The earlier configuration was selected from calibration only, but subsequent implementation work used the original holdout for regression checks. These labels are now explicitly treated as consumed. Future release evidence needs a new independent validation round.
 
 Run the reproducible workflow with:
 
@@ -44,23 +44,23 @@ This entire source is a **calibration cohort**. Tracker changes and threshold se
 |---|---:|
 | Segments / move labels | 5 / 71 |
 | Pose / measured-ball / tracked-ball coverage | 0.916418 / 0.887659 / 0.911540 |
-| Latest three-move precision / recall / F1 | 0.400000 / 0.338028 / 0.366412 |
-| Fixed-config gated repeatability F1 range | 0.360902-0.366412 |
-| Crossover precision / recall / F1 | 0.312500 / 0.166667 / 0.217391 |
-| Between-the-legs precision / recall / F1 | 0.400000 / 0.842105 / 0.542373 |
-| Behind-the-back precision / recall / F1 | 0.750000 / 0.136364 / 0.230769 |
+| Promoted live-default browser move F1 range | 0.519084-0.558140 |
+| Promoted live-default move F1 spread | 0.039056 (fails 0.03 diagnostic) |
+| Repeat-calibrated saved-config move F1 range | 0.551181-0.569106 |
+| Repeat-calibrated saved-config spread | 0.017925 (passes) |
+| Run-B saved-config precision / recall / F1 | 0.625000 / 0.492958 / 0.551181 |
 | Live three-move 95% gate | Failed |
 | Five-class release gate | Blocked |
 
-The predeclared ball-identity slice contains 23 visible boxes, one absent-ball negative, and one full occlusion. Adjacent-frame inspection found one box centered above the visible ball; the ignored local sidecar was corrected from decoded pixels before the final evaluation. Player-gated association measured tracked precision/recall/F1 of 0.695652 and raw precision/recall/F1 of 0.727273/0.695652/0.711111. The absent frame contains raw candidates but no reliable player, so it is now a true negative instead of a false track. Candidate-oracle recall ranged from 22/23 to 23/23 across valid runs. The occluded timestamp matched a measured candidate, not a prediction.
+The predeclared ball-identity slice contains 23 visible boxes, one absent-ball negative, and one full occlusion. Adjacent-frame inspection found one box centered above the visible ball; the ignored local sidecar was corrected from decoded pixels before the final evaluation. Two runs of the latest defaults measured tracked precision/recall/F1 of 0.695652-0.739130 and raw F1 of 0.711111-0.755556. The absent frame contains raw candidates but no reliable player, so it remained a true negative instead of a false track. Candidate-oracle recall was 22/23 (0.956522) in both runs. The occluded timestamp matched a measured candidate, not a prediction.
 
-The final tracker records complete pre-association candidate snapshots, demotes tiny color/motion fragments, weights full-ball components, and permits an immediate override from a learned detection of plausible size. Replay now preserves the player-acceptance decision, so tuning cannot reintroduce no-player distractors. A replay-selected 0.25-confidence/0.025-size configuration preserved ball F1 but reduced fresh-browser move F1 from 0.366412 to 0.344828, so it was rejected and the prior 0.15/0.045 defaults remain. A wider color set, resolution-relative component ceiling, and 0.10 learned-confidence override were also tested and rejected. Calibration-only move-threshold search over 243 configurations remains far below 95%, so additional threshold tuning is not the remedy.
+The final tracker records complete pre-association candidate snapshots, demotes tiny color/motion fragments, joins orange lobes split by a one-pixel seam, weights full-ball components, and permits an immediate override from a learned detection of plausible size. Replay preserves the player-acceptance decision, so tuning cannot reintroduce no-player distractors. The tracker tuner now searches 3,072 learned-override and guarded motion/color challenger configurations. Disabling distant color challenges improved representative visible-ball replay F1 from 0.500000 to 0.589286 but remained at 0/4 valid occlusion predictions and slightly reduced mixed move F1, so it was not promoted. The move tuner evaluates 6,075 depth/anatomy configurations across multiple calibration repeats. Threshold-only tuning remains far below 95%, so a representative basketball-specific detector and denser labels remain necessary.
 
 ### Fixed-configuration repeatability
 
 Browser exports can now target named ignored directories with `--output-dir`. `validation:repeatability` evaluates at least two distinct directories against one fixed saved move configuration, reports minimum/maximum/mean/spread for ball F1, candidate-oracle recall, and move F1, and fails its diagnostic when ball or move F1 spread exceeds 0.03 by default. This is a reproducibility diagnostic, not a release gate.
 
-Two independent player-gated exports produced identical ball F1 of 0.695652. Candidate-oracle recall ranged from 0.956522 to 1.000000. Move F1 ranged from 0.360902 to 0.366412, a spread of 0.005510, so the fixed-configuration diagnostic passed. Earlier larger score differences included retuning on each export and therefore mixed inference variance with threshold-selection variance.
+Two independent adaptive-focus exports produced ball F1 0.695652-0.739130, a spread of 0.043478 that fails the 0.03 diagnostic. Candidate-oracle recall was 0.956522 in both runs. Promoted live-default move F1 ranged from 0.519084 to 0.558140 and also missed the stability limit. A repeat-calibrated saved configuration reached 0.551181-0.569106 with a passing 0.017925 spread, but its tighter pose thresholds were not promoted because they regressed the older cohort. Learned-candidate frame coverage was 0.854438-0.860355.
 
 Reproduce the local workflow with:
 
@@ -68,11 +68,13 @@ Reproduce the local workflow with:
 npm run validation:prepare -- --input "validation/local/Video AI Movement Test.mov" --id mixed-moves-01 --move mixed --duration-seconds 84
 npm run validation:import-mixed -- --csv validation/local/video-ai-movement-timestamps-clean.csv --source-id mixed-moves-01 --cohort controlled-front-camera-mixed-2026-07 --duration-seconds 84
 npm run validation:tune -- --manifest validation/local/manifests/mixed-moves-01.json --moves crossover,between-the-legs,behind-the-back --output validation/local/mixed-moves-01-tuned-config.json
-npm run validation:tune-ball -- --manifest validation/local/manifests/mixed-moves-01.json --output validation/local/tuned-ball-tracker.json
+npm run validation:tune -- --manifest validation/local/manifests/mixed-moves-01.json --observations-dirs validation/local/repeatability/adaptive-focus-a,validation/local/repeatability/adaptive-focus-b --moves crossover,between-the-legs,behind-the-back --output validation/local/repeat-robust-move-config.json
+npm run validation:tune-ball -- --manifest validation/local/manifests/mixed-moves-01.json --observations-dirs validation/local/repeatability/adaptive-focus-a,validation/local/repeatability/adaptive-focus-b --output validation/local/repeat-robust-tuned.json
 npm run validate:moves -- --manifest validation/local/manifests/mixed-moves-01.json --split calibration --config validation/local/mixed-moves-01-tuned-config.json
+npm run validate:moves -- --manifest validation/local/manifests/mixed-moves-01.json --split calibration --observations-dir validation/local/repeatability/adaptive-focus-b --config validation/local/repeat-robust-move-config.json
 npm run validation:ball -- --manifest validation/local/manifests/mixed-moves-01.json --split calibration
 python scripts/export-validation-observations.py --output-dir validation/local/repeatability/run-a --force mixed-moves-01-000
-npm run validation:repeatability -- --manifest validation/local/manifests/mixed-moves-01.json --runs validation/local/repeatability/run-a,validation/local/repeatability/run-b --config validation/local/mixed-moves-01-tuned-config.json
+npm run validation:repeatability -- --manifest validation/local/manifests/mixed-moves-01.json --runs validation/local/repeatability/run-a,validation/local/repeatability/run-b --config validation/local/repeat-robust-move-config.json
 ```
 
 ## Ball-identity slice
@@ -95,7 +97,7 @@ The current default pipeline produced:
 
 High observation coverage therefore concealed wrong-object tracking in 32 of the 56 visible adjudicated frames. The default generic model supplied only 12 selected learned detections across 873 exported observations; color and motion heuristics supplied most measurements.
 
-The calibration labels can now be reproduced as a local YOLO detector package with `validation:ball-dataset`. The current export contains 54 training-eligible positive frames, two tiny partial positives retained separately for audit, four excluded full occlusions, and zero true absent-ball negatives. It is a pipeline fixture, not a sufficient training or validation dataset.
+The calibration labels can now be reproduced as a local YOLO detector package with `validation:ball-dataset`, including multiple calibration manifests without admitting holdout clips. The combined controlled-plus-mixed export contains 77 training-eligible positive frames, two tiny partial positives retained for audit, five excluded full occlusions, and one true absent-ball negative across three source IDs, two players, and two indoor setups. Its collection-readiness report still blocks on 20 total negatives from at least two sources, black-ball coverage, and verified hard-negative footage. It is a pipeline fixture, not a sufficient training or validation dataset, and readiness is deliberately separate from accuracy.
 
 An EfficientDet-Lite2 diagnostic increased learned detections and reached tracked F1 0.428571 and raw F1 0.446429, but its maximum decoded-frame offset was 166.667 ms. The 50 ms cadence gate correctly rejects that export, so Lite2 was not adopted and its scores are not valid tuning evidence.
 
@@ -122,6 +124,6 @@ These are pipeline and coverage diagnostics only. A track existing in a frame do
 
 ## Verification status
 
-The latest mixed-video implementation run passed 103/103 tests, strict TypeScript, the synthetic move benchmark, and the production build. All named browser observation exports used in the report passed the sampling-cadence gates. The separate expanded live-camera smoke test was not rerun in this cycle. Synthetic detector runtime and unit fixtures are useful regressions but are not real-video accuracy evidence.
+The latest mixed-video implementation run passed 125/125 tests, strict TypeScript, the synthetic benchmark, and the production build. All named browser observation exports used in the report passed the sampling-cadence gates, and the ball-annotation schedule/metadata browser smoke passed. The separate expanded live-camera smoke test was not rerun in this cycle. Synthetic detector runtime and unit fixtures are useful regressions but are not real-video accuracy evidence.
 
-Latest documented mixed calibration run: 2026-07-14. Results apply only to the controlled frontal-view recordings described above.
+Latest documented mixed calibration run: 2026-07-15. Results apply only to the controlled frontal-view recordings described above.

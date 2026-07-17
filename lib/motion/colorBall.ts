@@ -28,7 +28,12 @@ export function detectOrangeBallPixelCandidates(
     while (head < tail) {
       const x = queueX[head]; const y = queueY[head]; head += 1; pixels += 1; sumX += x; sumY += y;
       minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-      for (const [nx, ny] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]) {
+      // Basketball seams and motion blur can split one orange ball into thin,
+      // disconnected islands. Join orange pixels across a one-pixel gap while
+      // retaining the component's original pixels for fill/size scoring.
+      for (let dy = -2; dy <= 2; dy += 1) for (let dx = -2; dx <= 2; dx += 1) {
+        if (!dx && !dy || Math.abs(dx) + Math.abs(dy) > 2) continue;
+        const nx = x + dx; const ny = y + dy;
         if (nx < left || nx > right || ny < top || ny > bottom) continue; const index = ny * width + nx;
         if (mask[index] && !visited[index]) { visited[index] = 1; queueX[tail] = nx; queueY[tail] = ny; tail += 1; }
       }

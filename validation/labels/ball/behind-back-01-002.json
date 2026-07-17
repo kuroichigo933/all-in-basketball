@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "clipId": "behind-back-01-002",
+  "capture": { "ballAppearance": "orange", "playerId": "controlled-player-01", "lighting": "indoor-gym-fixed", "hardNegative": false },
   "protocol": {
     "name": "calibration-representative-v1-independent-visual-labeling",
     "selection": "Timestamps were predeclared before visual labeling. Labels were created from rendered source-video frames only, without reviewing observations, tracker output, or prior labels.",

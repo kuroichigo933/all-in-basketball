@@ -21,13 +21,13 @@ The preview stays at the camera's native frame rate while browser inference targ
 
 ## Measured status
 
-- Latest mixed-video implementation run: 103/103 tests, strict type-check, synthetic benchmark, and production build passing. Named browser exports preserve repeatability evidence; all reported runs passed cadence validation. The separate expanded live-camera smoke test was not rerun in this cycle.
+- Latest mixed-video implementation run: 125/125 tests, strict type-check, synthetic benchmark, and production build passing. Named browser exports preserve repeatability evidence; all reported runs passed cadence validation, and the ball-annotation schedule/metadata browser smoke passed. The separate expanded live-camera smoke test was not rerun in this cycle.
 - Current calibration after two-frame identity-safe reacquisition: controlled precision 0.658537, recall 0.490909, and F1 0.562500. Ball identity remains the dominant source of move errors.
-- The prior configuration's once-only holdout result remains precision 0.705882, recall 0.507042, and F1 0.590164. It was not rerun or used for the current change and must not become tuning data.
+- The original two-class holdout is now consumed regression data. The promoted hybrid defaults measured controlled precision 0.705882, recall 0.507042, and F1 0.590164 on it; future release evidence requires a new source-independent holdout.
 - The five-class release gate remains blocked because crossover, hesitation, and in-and-out do not yet have independent labeled holdout coverage.
 - The predeclared representative calibration protocol has 60/60 independently adjudicated frames: 56 visible boxes and four full occlusions. The current default pipeline localizes 24/56 visible labels, for tracked and raw precision/recall/F1 of 0.428571. All four occlusion labels matched measured distractors rather than predictions. It still has no truly absent-ball negatives.
 - The expanded live-camera smoke test continued inference at approximately 9.1-9.3 FPS with 99% measured/tracked coverage on its controlled generated feed. Coverage measures whether a track exists, not whether it follows the correct object.
-- The latest player-gated mixed calibration run reaches live-three precision 0.400000, recall 0.338028, and F1 0.366412 after calibration-only tuning. Its ball slice reaches tracked precision/recall/F1 of 0.695652 and raw F1 0.711111; the only absent-ball label is now a true negative. Two fixed-configuration gated exports produced identical ball F1 and move F1 0.360902-0.366412, passing the diagnostic 0.03-spread limit. Candidate-oracle recall ranged from 0.956522 to 1. The live-three 95% gate fails.
+- Adaptive focused inference retries a tighter dribble-zone crop only when the primary learned detector returns nothing. Two browser runs produced tracked ball F1 0.695652-0.739130 and candidate-oracle recall 0.956522. Wrist/hip depth gates and leg-corridor control evidence raised the promoted live-default move F1 range to 0.519084-0.558140; its 0.039056 spread still fails the 0.03 diagnostic. A repeat-calibrated saved configuration reaches 0.551181-0.569106 with a passing 0.017925 spread, but is not promoted because its tighter pose thresholds regress the older cohort. The 95% gate fails.
 
 No 95% or global accuracy claim is currently supported. The main technical blocker is reliable ball identity under blur, occlusion, and player/body motion; the generic object model is not a basketball-specific detector.
 
@@ -41,11 +41,13 @@ npm run benchmark
 npm run validation:prepare -- --input <path> --id <source-id> --move <move-name>
 npm run validation:import-mixed -- --csv <path> --source-id <source-id> --duration-seconds <seconds>
 npm run validation:tune -- --manifest validation/manifest.json
-npm run validation:tune-ball -- --manifest validation/manifest.json
+npm run validation:tune -- --manifest <manifest> --observations-dirs <run-a>,<run-b>
+npm run validation:tune-ball -- --manifest <manifest> --observations-dirs <run-a>,<run-b>
 npm run validation:repeatability -- --manifest validation/manifest.json --runs <run-a>,<run-b> --config <saved-config>
 npm run validate:moves -- --manifest validation/manifest.json --split calibration
 npm run validation:ball -- --manifest validation/manifest.json --split calibration
 npm run validation:ball-dataset -- --manifest validation/manifest.json --split calibration
+npm run validation:ball-dataset -- --manifest validation/manifest.json --additional-manifests <other-calibration-manifest> --output validation/local/ball-dataset/<name>
 npm run build
 ```
 

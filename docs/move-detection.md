@@ -8,8 +8,8 @@ Frames must meet pose and ball-confidence thresholds. Lateral moves require meas
 
 ## Current rules
 
-- **Crossover:** measured endpoints change sides across the player's hip centerline within the configured transition window, exceed body-relative and screen-space travel thresholds, and remain near a wrist. A second pose-supported path requires measured control to switch wrists across the centerline, persist for multiple frames, and stay outside the knee corridor.
-- **Between-the-legs:** a lateral transfer enters the knee corridor below the hips, or the controlling wrist changes while a measured ball stays near the receiving wrist and stance evidence supports the between-the-legs path.
+- **Crossover:** measured endpoints change sides across the player's hip centerline within the configured transition window, exceed body-relative and screen-space travel thresholds, remain near a wrist, and use wrist depth to reject shallow ambiguous transfers when MediaPipe depth is available. A second pose-supported path requires measured control to switch wrists across the centerline and persist; a wrist far in front of the hips supports crossover instead of a specific behind/through-leg label.
+- **Between-the-legs:** a lateral transfer enters the knee corridor below the hips while a controlling wrist is sustained in that corridor, or the controlling wrist changes while a measured ball stays near the receiving wrist and stance evidence supports the between-the-legs path.
 - **Behind-the-back:** a lateral transfer crosses in a hip-height band while avoiding the lower between-knee region, or a pose-supported wrist transfer has the narrower stance associated with a behind-the-back action.
 - **Hesitation:** visible approach motion is followed by a sustained low-travel interval near a wrist. A stationary hold alone is not sufficient.
 - **In-and-out:** the ball moves inward, reverses to its original side, and finishes near the same-side wrist.
@@ -35,16 +35,16 @@ The latest controlled calibration result on the real two-class cohort is:
 | Current calibration precision | 0.658537 |
 | Current calibration recall | 0.490909 |
 | Current calibration F1 | 0.562500 |
-| Prior configuration's once-only holdout precision | 0.705882 |
-| Prior configuration's once-only holdout recall | 0.507042 |
-| Prior configuration's once-only holdout F1 | 0.590164 |
+| Consumed holdout controlled precision | 0.705882 |
+| Consumed holdout controlled recall | 0.507042 |
+| Consumed holdout controlled F1 | 0.590164 |
 
-The controlled gate requires both behind-the-back and between-the-legs to be represented and requires micro precision and recall of at least 0.95 on holdout data. The prior configuration was evaluated on holdout exactly once and failed. Identity-safe reacquisition was subsequently evaluated on calibration only; those consumed holdout labels were not rerun or used as feedback. The five-class release gate remains blocked until independent holdout labels exist for crossover, hesitation, and in-and-out as well.
+The controlled gate requires both behind-the-back and between-the-legs to be represented and requires micro precision and recall of at least 0.95 on holdout data. The original holdout has now been consumed by regression checks and failed; it is no longer valid untouched release evidence. The five-class release gate remains blocked until new independent holdout labels exist for all five moves.
 
 Synthetic tests verify rule mechanics but do not count as accuracy evidence. No 95% claim is warranted by the current results.
 
 ### Mixed three-move calibration cohort
 
-The first 84 seconds of the local mixed recording contain 30 crossover, 19 between-the-legs, and 22 behind-the-back labels. All five segments are calibration data because tracker changes and configuration selection used this source. After player-gated ball association and a 243-configuration move search, the latest live-three precision is 0.400000, recall is 0.338028, and F1 is 0.366412. Latest between-the-legs recall is 0.842105, crossover recall is 0.166667, and behind-the-back recall is 0.136364. Two fixed-configuration browser runs produced move F1 0.360902-0.366412. The rolling detector still cannot reliably count the rapid half-second sequences while ball identity and 2D depth evidence are unstable.
+The first 84 seconds of the local mixed recording contain 30 crossover, 19 between-the-legs, and 22 behind-the-back labels. All five segments and both inference repeats are calibration data because tracker and threshold choices used this source. Adaptive focused detector fallback raised learned-candidate frame coverage to 0.854438-0.860355. The promoted live defaults produce move F1 0.519084-0.558140; a repeat-calibrated saved configuration reaches 0.551181-0.569106 with a 0.017925 spread. Ball F1 remains 0.695652-0.739130 with a failing 0.043478 spread. The rolling detector still cannot reliably count all rapid half-second sequences while ball identity varies between browser inference runs.
 
 The evaluator reports `liveThreeTotal` separately from global five-class output. Predictions of hesitation or in-and-out no longer contaminate the live-three gate, while they remain visible in the global report. The live-three gate failed and cannot become release evidence until a new untouched labeled recording is evaluated once.

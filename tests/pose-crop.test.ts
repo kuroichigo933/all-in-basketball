@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mapPointFromCrop, selectPoseBallCrop } from "../lib/motion/poseCrop.ts";
+import { mapPointFromCrop, selectPoseBallCrop, selectPoseBallFocusCrop } from "../lib/motion/poseCrop.ts";
 import type { Point } from "../lib/motion/types.ts";
 
 const pose = Array.from({ length: 33 }, (_, index): Point => ({
@@ -25,4 +25,18 @@ test("maps a crop-model point back into full-frame coordinates", () => {
 
 test("does not crop without a reliable player pose", () => {
   assert.equal(selectPoseBallCrop(pose.slice(0, 5), 1280, 720), null);
+});
+
+test("selects a tighter dribble-zone fallback crop", () => {
+  const portraitPose = Array.from({ length: 33 }, (): Point => ({ x: 0.5, y: 0.5, visibility: 0 }));
+  for (const [index, x, y] of [[15, 0.38, 0.46], [16, 0.62, 0.48], [23, 0.43, 0.56], [24, 0.57, 0.56],
+    [25, 0.4, 0.72], [26, 0.6, 0.72]] as const) portraitPose[index] = { x, y, visibility: 0.95 };
+  const broad = selectPoseBallCrop([...portraitPose, ...pose.slice(0, 6)], 720, 1280);
+  const focus = selectPoseBallFocusCrop(portraitPose, 720, 1280);
+  assert.ok(focus); assert.ok(focus.width < 1); assert.ok(focus.y <= 0.46); assert.ok(focus.y + focus.height >= 0.8);
+  if (broad) assert.ok(focus.width <= broad.width);
+});
+
+test("does not focus without enough lower-body evidence", () => {
+  assert.equal(selectPoseBallFocusCrop(pose.slice(0, 16), 1280, 720), null);
 });

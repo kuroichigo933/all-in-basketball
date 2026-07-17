@@ -24,10 +24,30 @@ test("detects a crossover with timestamps and evidence", () => {
 });
 
 test("detects between-the-legs only when the middle sample is in the leg region", () => {
-  const moves = detectMoves([frame(0, 0.3), frame(250, 0.5, 0.62), frame(500, 0.7)]);
+  const controlled = (observation: MotionObservation): MotionObservation => ({
+    ...observation,
+    leftWrist: { x: 0.5, y: 0.62, visibility: 0.95 },
+  });
+  const moves = detectMoves([frame(0, 0.3), controlled(frame(250, 0.5, 0.62)), controlled(frame(500, 0.7, 0.62))]);
   assert.ok(moves.some((move) => move.move === "between-the-legs"));
   const outside = detectMoves([frame(0, 0.3), frame(250, 0.5, 0.3), frame(500, 0.7)]);
   assert.equal(outside.some((move) => move.move === "between-the-legs"), false);
+});
+
+test("abstains from a lateral crossover when both wrists stay shallow in pose depth", () => {
+  const shallow = (observation: MotionObservation): MotionObservation => ({
+    ...observation,
+    leftWrist: { ...observation.leftWrist, z: -0.3 }, rightWrist: { ...observation.rightWrist, z: -0.3 },
+    leftHip: { ...observation.leftHip, z: 0 }, rightHip: { ...observation.rightHip, z: 0 },
+  });
+  const moves = detectMoves([shallow(frame(0, 0.3, 0.3)), shallow(frame(250, 0.5, 0.3)), shallow(frame(500, 0.7, 0.3))]);
+  assert.equal(moves.some((move) => move.move === "crossover"), false);
+});
+
+test("does not call a projected leg-region crossing between-the-legs without sustained wrist control", () => {
+  const moves = detectMoves([frame(0, 0.3), frame(250, 0.5, 0.62), frame(500, 0.7)]);
+  assert.equal(moves.some((move) => move.move === "between-the-legs"), false);
+  assert.ok(moves.some((move) => move.move === "behind-the-back"));
 });
 
 test("detects a controlled hesitation and returns no invented result for missing ball data", () => {
@@ -126,6 +146,16 @@ test("uses normalized knee spread to distinguish pose-supported transfers", () =
   const poseOnly = { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10 };
   assert.ok(detectMoves(transfer(true), poseOnly).some((move) => move.move === "between-the-legs"));
   assert.ok(detectMoves(transfer(false), poseOnly).some((move) => move.move === "behind-the-back"));
+});
+
+test("uses normalized wrist depth to distinguish a front-of-body crossover handoff", () => {
+  const source = { ...frame(0, 0.62, 0.62), rightWrist: { x: 0.56, y: 0.62, z: 0, visibility: 0.95 } };
+  const destination = { ...frame(300, 0.38, 0.62), leftWrist: { x: 0.44, y: 0.62, z: -1.6, visibility: 0.95 } };
+  const moves = detectMoves([source, destination, { ...destination, timeMs: 450 }], { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10 });
+  const crossover = moves.find((move) => move.move === "crossover");
+  assert.ok(crossover);
+  assert.match(crossover.evidence.join(" "), /in front of the hips/);
+  assert.equal(moves.some((move) => move.move === "between-the-legs"), false);
 });
 
 test("does not treat the first wrist seen in the knee corridor as a handoff", () => {

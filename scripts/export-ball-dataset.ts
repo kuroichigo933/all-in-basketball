@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
-import { createBallDatasetSamples, requireCalibrationDatasetSplit, yoloBallLabel, type BallDetectorDatasetSample } from "../lib/motion/ballDataset.ts";
+import { assessBallDetectorCollectionReadiness, createBallDatasetSamples, requireCalibrationDatasetSplit, yoloBallLabel, type BallDetectorDatasetSample } from "../lib/motion/ballDataset.ts";
 import { validateBallIdentityEvaluationLabels } from "../lib/motion/evaluateBall.ts";
-import { selectSplit, validateManifest, type ValidationSplit } from "../lib/motion/validation.ts";
+import { selectSplit, validateBallCaptureMetadata, validateManifest, type BallCaptureMetadata, type ValidationSplit } from "../lib/motion/validation.ts";
 
-export type BallDatasetArgs = { manifest: string; split: "calibration"; output: string };
+export type BallDatasetArgs = { manifest: string; additionalManifests: string[]; split: "calibration"; output: string };
 
 function valueAfter(argv: string[], name: string, fallback: string) {
   const index = argv.indexOf(name);
@@ -17,8 +17,10 @@ function valueAfter(argv: string[], name: string, fallback: string) {
 export function parseBallDatasetArgs(argv: string[]): BallDatasetArgs {
   const split = valueAfter(argv, "--split", "calibration");
   requireCalibrationDatasetSplit(split);
+  const additionalManifests = valueAfter(argv, "--additional-manifests", "").split(",").map((value) => value.trim()).filter(Boolean);
   return {
     manifest: valueAfter(argv, "--manifest", "validation/manifest.json"),
+    additionalManifests,
     split,
     output: valueAfter(argv, "--output", "validation/local/ball-dataset/calibration-representative-v1"),
   };
@@ -38,6 +40,7 @@ type Sidecar = {
   clipId?: string;
   protocol?: { name?: string; scheduledTimesMs?: number[] };
   labels?: unknown;
+  capture?: unknown;
 };
 
 function readSidecar(path: string, clipId: string) {
@@ -50,7 +53,31 @@ function readSidecar(path: string, clipId: string) {
     const missing = sidecar.protocol.scheduledTimesMs.filter((timeMs) => !actual.has(timeMs));
     if (missing.length) throw new Error(`Incomplete ball-label protocol for ${clipId}: missing ${missing.join(", ")} ms.`);
   }
-  return { labels, protocol: sidecar.protocol?.name ?? null };
+  const capture = sidecar.capture === undefined ? undefined : validateBallCaptureMetadata(sidecar.capture);
+  return { labels, protocol: sidecar.protocol?.name ?? null, capture };
+}
+
+export function requireUniqueBallDatasetClipIds(clips: Array<{ id: string }>) {
+  const clipIds = new Set<string>();
+  for (const clip of clips) {
+    if (clipIds.has(clip.id)) throw new Error(`Duplicate calibration clip ID across manifests: ${clip.id}.`);
+    clipIds.add(clip.id);
+  }
+}
+
+function captureMatches(left: BallCaptureMetadata, right: BallCaptureMetadata) {
+  return left.ballAppearance === right.ballAppearance && left.playerId === right.playerId &&
+    left.lighting === right.lighting && left.hardNegative === right.hardNegative;
+}
+
+export function resolveBallDatasetCaptureMetadata(
+  manifestCapture?: BallCaptureMetadata,
+  sidecarCapture?: BallCaptureMetadata,
+) {
+  if (manifestCapture && sidecarCapture && !captureMatches(manifestCapture, sidecarCapture)) {
+    throw new Error("Capture metadata disagrees between manifest and ball-label sidecar.");
+  }
+  return sidecarCapture ?? manifestCapture;
 }
 
 function extractFrame(video: string, timeMs: number, target: string) {
@@ -64,25 +91,31 @@ function extractFrame(video: string, timeMs: number, target: string) {
 }
 
 export function exportBallDataset(args: BallDatasetArgs) {
-  const manifestPath = resolve(args.manifest);
-  const manifestRoot = dirname(manifestPath);
+  const manifestPaths = [args.manifest, ...args.additionalManifests].map((path) => resolve(path));
   const output = resolveSafeBallDatasetOutput(args.output);
-  const manifest = validateManifest(JSON.parse(readFileSync(manifestPath, "utf8")));
-  const clips = selectSplit(manifest, args.split);
-  if (!clips.length) throw new Error("No calibration clips were found.");
+  const clipInputs = manifestPaths.flatMap((manifestPath) => {
+    const manifest = validateManifest(JSON.parse(readFileSync(manifestPath, "utf8")));
+    return selectSplit(manifest, args.split).map((clip) => ({ clip, manifestRoot: dirname(manifestPath) }));
+  });
+  if (!clipInputs.length) throw new Error("No calibration clips were found.");
+  requireUniqueBallDatasetClipIds(clipInputs.map(({ clip }) => clip));
   const protocols = new Set<string>();
   let occludedExcluded = 0;
-  const prepared = clips.map((clip) => {
+  const prepared = clipInputs.map(({ clip, manifestRoot }) => {
     if (!clip.video) throw new Error(`Validation clip ${clip.id} has no local video path.`);
     const video = resolve(manifestRoot, clip.video);
     if (!existsSync(video)) throw new Error(`Validation video not found for ${clip.id}: ${video}`);
     const sidecarPath = resolve(manifestRoot, "labels", "ball", `${clip.id}.json`);
-    const { labels, protocol } = readSidecar(sidecarPath, clip.id);
+    const { labels, protocol, capture } = readSidecar(sidecarPath, clip.id);
+    let resolvedCapture: BallCaptureMetadata | undefined;
+    try { resolvedCapture = resolveBallDatasetCaptureMetadata(clip.capture, capture); }
+    catch { throw new Error(`Capture metadata disagrees between manifest and ball-label sidecar for ${clip.id}.`); }
     if (protocol) protocols.add(protocol);
     occludedExcluded += labels.filter((label) => label.visibility === "occluded").length;
-    return { video, labels, samples: createBallDatasetSamples(clip, labels) };
+    return { video, labels, clip: { ...clip, ...(resolvedCapture ? { capture: resolvedCapture } : {}) }, samples: createBallDatasetSamples(clip, labels) };
   });
   const samples: BallDetectorDatasetSample[] = prepared.flatMap((item) => item.samples);
+  const collectionReadiness = assessBallDetectorCollectionReadiness(prepared.map((item) => item.clip), samples);
 
   const visible = samples.filter((sample) => sample.visibility === "visible").length;
   const absent = samples.length - visible;
@@ -93,10 +126,12 @@ export function exportBallDataset(args: BallDatasetArgs) {
     format: "yolo-detection",
     classNames: ["basketball"],
     split: args.split,
-    sourceManifest: relative(output, manifestPath).replaceAll("\\", "/"),
+    sourceManifest: relative(output, manifestPaths[0]).replaceAll("\\", "/"),
+    sourceManifests: manifestPaths.map((manifestPath) => relative(output, manifestPath).replaceAll("\\", "/")),
     protocols: Array.from(protocols).sort(),
     samples,
-    summary: { clips: clips.length, samples: samples.length, trainingEligible, difficultExcluded, visible, absent, occludedExcluded },
+    summary: { clips: clipInputs.length, samples: samples.length, trainingEligible, difficultExcluded, visible, absent, occludedExcluded },
+    collectionReadiness,
     limitations: [
       "Calibration examples only; do not treat this package as an independent validation set.",
       "Occluded labels are excluded because they are neither positive boxes nor true absent-ball negatives.",
@@ -125,7 +160,7 @@ export function exportBallDataset(args: BallDatasetArgs) {
     rmSync(staging, { recursive: true, force: true });
     throw error;
   }
-  console.log(JSON.stringify({ output, ...index.summary }, null, 2));
+  console.log(JSON.stringify({ output, ...index.summary, collectionReadiness }, null, 2));
   return index;
 }
 

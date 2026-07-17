@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { buildValidationSegmentArgs, parsePrepareArgs } from "../scripts/prepare-validation.ts";
 import { parseMoveLabelCsv, segmentMoveLabels } from "../lib/motion/moveLabelCsv.ts";
 import { parseMixedImportArgs } from "../scripts/import-mixed-validation.ts";
+import { resolveValidationObservationsDirectory, validationObservationPath } from "../lib/motion/validationObservations.ts";
+import { resolve } from "node:path";
 import { evaluateGates, parseMoveSelection, selectSplit, validateManifest } from "../lib/motion/validation.ts";
 
 test("parses arbitrary validation source paths", () => {
@@ -65,4 +67,24 @@ test("validates split-aware manifests", () => {
   const manifest = { schemaVersion: 2, clips: [{ id: "a", sourceId: "s", segmentId: "001", cohort: "controlled", split: "holdout", observations: "a.json", expected: [] }] };
   assert.equal(validateManifest(manifest).clips[0].split, "holdout");
   assert.throws(() => validateManifest({ ...manifest, clips: [{ ...manifest.clips[0], sourceId: "" }] }));
+});
+
+test("validates optional detector capture metadata", () => {
+  const manifest = { schemaVersion: 2, clips: [{ id: "a", sourceId: "s", segmentId: "001", cohort: "controlled", split: "calibration", observations: "a.json", expected: [] }] };
+  assert.equal(validateManifest({ ...manifest, clips: [{ ...manifest.clips[0], capture: {
+    ballAppearance: " black ", playerId: " player-b ", lighting: " indoor ", hardNegative: true,
+  } }] }).clips[0].capture?.ballAppearance, "black");
+  assert.throws(() => validateManifest({ ...manifest, clips: [{ ...manifest.clips[0], capture: {
+    ballAppearance: "", playerId: "player-b", lighting: "indoor", hardNegative: true,
+  } }] }), /capture metadata/);
+});
+
+test("confines named observation overrides to local validation data", () => {
+  const directory = resolveValidationObservationsDirectory("validation/local/repeatability/run-a");
+  assert.equal(directory, resolve("validation/local/repeatability/run-a"));
+  assert.equal(validationObservationPath(resolve("validation/local/manifests"),
+    { id: "clip-001", observations: "../../observations/clip-001.json" }, directory), resolve(directory, "clip-001.json"));
+  assert.equal(validationObservationPath(resolve("validation/local/manifests"),
+    { id: "clip-001", observations: "../../observations/clip-001.json" }), resolve("validation/observations/clip-001.json"));
+  assert.throws(() => resolveValidationObservationsDirectory("validation/observations"), /validation\/local/);
 });

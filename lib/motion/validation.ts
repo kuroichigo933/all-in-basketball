@@ -7,8 +7,15 @@ export const ALL_MOVE_NAMES: MoveName[] = ["crossover", "between-the-legs", "beh
 export const CONTROLLED_MOVE_NAMES: MoveName[] = ["behind-the-back", "between-the-legs"];
 export const LIVE_MOVE_NAMES: MoveName[] = ["crossover", "between-the-legs", "behind-the-back"];
 export type ValidationSplit = "calibration" | "holdout";
+export type BallCaptureMetadata = {
+  ballAppearance: string;
+  playerId: string;
+  lighting: string;
+  hardNegative: boolean;
+};
 export type ValidationClip = {
   id: string; sourceId: string; segmentId: string; cohort: string; split: ValidationSplit;
+  capture?: BallCaptureMetadata;
   video?: string; observations: string; expected: ExpectedMove[];
 };
 export type ValidationManifest = { schemaVersion: 2; toleranceMs?: number; clips: ValidationClip[] };
@@ -26,6 +33,23 @@ export type ValidationReport = {
   gates: { controlledTwoClass: GateResult; liveThreeMove: GateResult; fiveClassRelease: GateResult };
 };
 
+export function validateBallCaptureMetadata(value: unknown): BallCaptureMetadata {
+  if (!value || typeof value !== "object") throw new Error("Ball capture metadata must be an object.");
+  const capture = value as Partial<BallCaptureMetadata>;
+  if (
+    typeof capture.ballAppearance !== "string" || !capture.ballAppearance.trim() ||
+    typeof capture.playerId !== "string" || !capture.playerId.trim() ||
+    typeof capture.lighting !== "string" || !capture.lighting.trim() ||
+    typeof capture.hardNegative !== "boolean"
+  ) throw new Error("Invalid ball capture metadata.");
+  return {
+    ballAppearance: capture.ballAppearance.trim(),
+    playerId: capture.playerId.trim(),
+    lighting: capture.lighting.trim(),
+    hardNegative: capture.hardNegative,
+  };
+}
+
 export function validateManifest(value: unknown): ValidationManifest {
   if (!value || typeof value !== "object") throw new Error("Manifest must be an object.");
   const manifest = value as Partial<ValidationManifest>;
@@ -33,6 +57,10 @@ export function validateManifest(value: unknown): ValidationManifest {
   for (const clip of manifest.clips) {
     if (!clip.id || !clip.sourceId || !clip.segmentId || !clip.cohort || !["calibration", "holdout"].includes(clip.split) || !clip.observations || !Array.isArray(clip.expected)) {
       throw new Error(`Invalid validation clip: ${clip.id ?? "unknown"}`);
+    }
+    if (clip.capture) {
+      try { clip.capture = validateBallCaptureMetadata(clip.capture); }
+      catch { throw new Error(`Invalid capture metadata for validation clip: ${clip.id}`); }
     }
   }
   return manifest as ValidationManifest;

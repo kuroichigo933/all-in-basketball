@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from pathlib import Path
 from playwright.async_api import async_playwright
 
@@ -11,12 +12,19 @@ async def main():
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(executable_path=r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", headless=True)
         page = await browser.new_page()
-        await page.goto("http://127.0.0.1:3000/validation-runner", wait_until="domcontentloaded", timeout=60_000)
+        await page.goto(f"{os.environ.get('BALL_ANNOTATION_BASE_URL', 'http://127.0.0.1:3000')}/validation-runner", wait_until="domcontentloaded", timeout=60_000)
         await page.wait_for_timeout(2_000)
         await page.get_by_role("button", name="Upload benchmark").click()
         await page.locator('input[type="file"]').wait_for(state="attached", timeout=60_000)
         await page.locator('input[type="file"]').set_input_files(str(VIDEO))
         await page.get_by_text("Video ready to analyze.").wait_for(timeout=60_000)
+        await page.get_by_role("button", name="Create 20-frame schedule").click()
+        await page.get_by_text("0/20 scheduled").wait_for()
+        assert await page.get_by_role("button", name="Create 20-frame schedule").is_disabled()
+        await page.get_by_label("Ball appearance").select_option("black")
+        await page.get_by_label("Pseudonymous player ID").fill("player-smoke")
+        await page.get_by_label("Lighting condition").fill("indoor-smoke")
+        await page.get_by_text("Hard-negative footage").click()
         await page.locator("video").evaluate("video => { video.pause(); video.currentTime = 13; }")
         await page.get_by_role("button", name="Draw ball box").click()
         preview = page.locator("video").locator("..")
@@ -41,6 +49,7 @@ async def main():
         sidecar_path = Path(await download.path())
         sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
         assert [label["visibility"] for label in sidecar["labels"]] == ["visible", "absent", "occluded"]
+        assert sidecar["capture"] == {"ballAppearance": "black", "playerId": "player-smoke", "lighting": "indoor-smoke", "hardNegative": True}
         for _ in range(3):
             await page.get_by_role("button", name="Delete").last.click()
         await page.get_by_text("0 labeled frames").wait_for()
@@ -48,6 +57,8 @@ async def main():
         await page.get_by_text("Imported 3 independent ball labels.").wait_for()
         await page.get_by_text("3 labeled frames").wait_for()
         await page.get_by_text("temporarily occluded", exact=True).wait_for()
+        assert await page.get_by_label("Ball appearance").input_value() == "black"
+        assert await page.get_by_label("Pseudonymous player ID").input_value() == "player-smoke"
         await page.locator('input[accept="application/json"]').set_input_files(str(SCHEDULE))
         await page.get_by_text("Imported 12 scheduled ball-label frames.").wait_for()
         await page.get_by_role("button", name="Next scheduled frame").wait_for()

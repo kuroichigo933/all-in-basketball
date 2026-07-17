@@ -2,18 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { FilesetResolver, ObjectDetector, PoseLandmarker } from "@mediapipe/tasks-vision";
+import { createUniformBallLabelSchedule } from "../../../lib/motion/ballLabelSchedule";
 import { detectMoves, summarizeAnalysis } from "@/lib/motion/detectMoves";
 import { trackBallContinuity } from "@/lib/motion/trackBall";
 import type { AnalysisSummary, MotionObservation, Point } from "@/lib/motion/types";
 import type { MoveName } from "@/lib/motion/types";
 import type { ExpectedMove } from "@/lib/motion/evaluate";
-import { ALL_MOVE_NAMES } from "@/lib/motion/validation";
+import { ALL_MOVE_NAMES, validateBallCaptureMetadata, type BallCaptureMetadata } from "@/lib/motion/validation";
 import { detectMovingBallPixelCandidates, detectOrangeBallPixelCandidates } from "@/lib/motion/colorBall";
 import { OnlineBallTracker, type BallMeasurement } from "@/lib/motion/onlineBallTracker";
 import { selectCompletedLiveMove, type LiveMoveCursor } from "@/lib/motion/liveMoveEvents";
 import { summarizeSampling, type SamplingDiagnostics } from "@/lib/motion/sampling";
 import { applyPoseBallPrior } from "@/lib/motion/ballCandidate";
-import { mapPointFromCrop, selectPoseBallCrop } from "@/lib/motion/poseCrop";
+import { mapPointFromCrop, selectPoseBallCrop, selectPoseBallFocusCrop, type NormalizedCrop } from "@/lib/motion/poseCrop";
 import { evaluateBallIdentity, validateBallIdentityEvaluationLabels, type BallIdentityEvaluationLabel } from "@/lib/motion/evaluateBall";
 import { GENERIC_BALL_MODEL, MediaPipeBallDetector, resolvePreferredBallModel, type BallModelConfig, type BrowserBallDetector } from "@/lib/motion/browserBallDetector";
 
@@ -63,6 +64,10 @@ export default function AITracker() {
   const [labelStartMs, setLabelStartMs] = useState<number | null>(null);
   const [ballLabels, setBallLabels] = useState<BallIdentityEvaluationLabel[]>([]);
   const [ballScheduleMs, setBallScheduleMs] = useState<number[]>([]);
+  const [ballAppearance, setBallAppearance] = useState("");
+  const [capturePlayerId, setCapturePlayerId] = useState("");
+  const [captureLighting, setCaptureLighting] = useState("");
+  const [captureHardNegative, setCaptureHardNegative] = useState(false);
   const [drawingBallBox, setDrawingBallBox] = useState(false);
   const [ballDrag, setBallDrag] = useState<{ start: Point; current: Point } | null>(null);
   const [clipId, setClipId] = useState("");
@@ -196,18 +201,28 @@ export default function AITracker() {
     const poseResult = poseRef.current!.detectForVideo(video, inferenceTimestamp);
     const points = (poseResult.landmarks[0] ?? []) as Point[];
     const crop = selectPoseBallCrop(points, video.videoWidth, video.videoHeight);
-    let objectInput: HTMLVideoElement | HTMLCanvasElement = video;
-    if (crop) {
-      const canvas = objectCanvasRef.current ?? document.createElement("canvas"); objectCanvasRef.current = canvas;
-      if (canvas.width !== 320 || canvas.height !== 320) { canvas.width = 320; canvas.height = 320; }
-      const context = canvas.getContext("2d");
-      context?.drawImage(video, crop.x * video.videoWidth, crop.y * video.videoHeight, crop.width * video.videoWidth, crop.height * video.videoHeight, 0, 0, canvas.width, canvas.height);
-      if (context) objectInput = canvas;
+    const detectInCrop = (selectedCrop: NormalizedCrop | null, timestamp: number): BallMeasurement[] => {
+      let objectInput: HTMLVideoElement | HTMLCanvasElement = video;
+      let renderedCrop: NormalizedCrop | null = null;
+      if (selectedCrop) {
+        const canvas = objectCanvasRef.current ?? document.createElement("canvas"); objectCanvasRef.current = canvas;
+        if (canvas.width !== 320 || canvas.height !== 320) { canvas.width = 320; canvas.height = 320; }
+        const context = canvas.getContext("2d");
+        context?.drawImage(video, selectedCrop.x * video.videoWidth, selectedCrop.y * video.videoHeight,
+          selectedCrop.width * video.videoWidth, selectedCrop.height * video.videoHeight, 0, 0, canvas.width, canvas.height);
+        if (context) { objectInput = canvas; renderedCrop = selectedCrop; }
+      }
+      return objectsRef.current!.detectForVideo(objectInput, timestamp)
+        .map((candidate) => ({ point: renderedCrop ? mapPointFromCrop(candidate.point, renderedCrop) : candidate.point,
+          confidence: candidate.confidence, source: "detected" as const, detectorId: candidate.detectorId,
+          apparentSize: renderedCrop ? candidate.apparentSize * Math.sqrt(renderedCrop.width * renderedCrop.height) : candidate.apparentSize }));
+    };
+    let modelMeasurements = detectInCrop(crop, inferenceTimestamp);
+    if (!modelMeasurements.length && crop) {
+      const focusCrop = selectPoseBallFocusCrop(points, video.videoWidth, video.videoHeight);
+      const materiallyTighter = focusCrop && focusCrop.width < crop.width * 0.95;
+      if (materiallyTighter) modelMeasurements = detectInCrop(focusCrop, inferenceTimestamp + 0.01);
     }
-    const modelMeasurements: BallMeasurement[] = objectsRef.current!.detectForVideo(objectInput, inferenceTimestamp)
-      .map((candidate) => ({ point: crop ? mapPointFromCrop(candidate.point, crop) : candidate.point,
-        confidence: candidate.confidence, source: "detected" as const, detectorId: candidate.detectorId,
-        apparentSize: crop ? candidate.apparentSize * Math.sqrt(crop.width * crop.height) : candidate.apparentSize }));
     const poseConfidence = points.length ? points.reduce((sum, point) => sum + (point.visibility ?? 1), 0) / points.length : 0;
     const measurements = detectVisualBalls(video, points);
     measurements.push(...modelMeasurements);
@@ -416,7 +431,8 @@ export default function AITracker() {
     if (!file.type.startsWith("video/")) { setStatus("Please choose a supported video file."); return; }
     if (fileUrlRef.current) URL.revokeObjectURL(fileUrlRef.current);
     const url = URL.createObjectURL(file); fileUrlRef.current = url;
-    setVideoReady(false); videoRef.current.src = url; setResult(null); setSampling(null); setExportData([]); setLabels([]); setLabelStartMs(null); setBallLabels([]); setBallScheduleMs([]); setDrawingBallBox(false); setBallDrag(null);
+    setVideoReady(false); videoRef.current.src = url; setResult(null); setSampling(null); setExportData([]); setLabels([]); setLabelStartMs(null); setBallLabels([]); setBallScheduleMs([]);
+    setBallAppearance(""); setCapturePlayerId(""); setCaptureLighting(""); setCaptureHardNegative(false); setDrawingBallBox(false); setBallDrag(null);
     setClipId(file.name.replace(/\.[^.]+$/, "")); setProgress(0); setStatus(`Loading: ${file.name}`);
   }
 
@@ -430,7 +446,14 @@ export default function AITracker() {
 
   function downloadBallLabels() {
     const protocol = { name: "manual-independent-v1", ...(ballScheduleMs.length ? { scheduledTimesMs: ballScheduleMs } : {}) };
-    const payload = JSON.stringify({ schemaVersion: 1, clipId, protocol, labels: ballLabels }, null, 2);
+    const metadataStarted = Boolean(ballAppearance || capturePlayerId.trim() || captureLighting.trim() || captureHardNegative);
+    if (metadataStarted && (!ballAppearance || !capturePlayerId.trim() || !captureLighting.trim())) {
+      setStatus("Complete ball appearance, player ID, and lighting before exporting capture metadata."); return;
+    }
+    const capture: BallCaptureMetadata | undefined = metadataStarted ? {
+      ballAppearance, playerId: capturePlayerId.trim(), lighting: captureLighting.trim(), hardNegative: captureHardNegative,
+    } : undefined;
+    const payload = JSON.stringify({ schemaVersion: 1, clipId, protocol, ...(capture ? { capture } : {}), labels: ballLabels }, null, 2);
     const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${clipId || "basketball-analysis"}.ball-labels.json`; anchor.click();
     URL.revokeObjectURL(url);
@@ -439,7 +462,7 @@ export default function AITracker() {
   async function importBallLabels(file: File | undefined) {
     if (!file) return;
     try {
-      const sidecar = JSON.parse(await file.text()) as { schemaVersion?: number; clipId?: string; protocol?: { scheduledTimesMs?: unknown } | string; clips?: Record<string, unknown>; labels?: unknown };
+      const sidecar = JSON.parse(await file.text()) as { schemaVersion?: number; clipId?: string; protocol?: { scheduledTimesMs?: unknown } | string; clips?: Record<string, unknown>; capture?: unknown; labels?: unknown };
       const collectionSchedule = clipId && sidecar.clips ? sidecar.clips[clipId] : undefined;
       if (sidecar.schemaVersion !== 1 || (!Array.isArray(sidecar.labels) && !Array.isArray(collectionSchedule))) throw new Error("Expected a schemaVersion 1 ball-label sidecar or schedule.");
       if (sidecar.clipId && clipId && sidecar.clipId !== clipId) throw new Error(`Labels belong to ${sidecar.clipId}, not ${clipId}.`);
@@ -449,7 +472,9 @@ export default function AITracker() {
       const schedule = Array.isArray(declaredSchedule)
         ? Array.from(new Set(declaredSchedule.filter((timeMs): timeMs is number => typeof timeMs === "number" && Number.isFinite(timeMs) && timeMs >= 0))).sort((a, b) => a - b)
         : [];
+      const capture = sidecar.capture === undefined ? undefined : validateBallCaptureMetadata(sidecar.capture);
       setBallLabels(imported); setBallScheduleMs(schedule); setDrawingBallBox(false); setBallDrag(null); drawBallAnnotation(null);
+      if (capture) { setBallAppearance(capture.ballAppearance); setCapturePlayerId(capture.playerId); setCaptureLighting(capture.lighting); setCaptureHardNegative(capture.hardNegative); }
       const nextScheduled = schedule.find((timeMs) => !imported.some((label) => label.timeMs === timeMs));
       if (nextScheduled !== undefined && videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = nextScheduled / 1000; }
       setStatus(Array.isArray(sidecar.labels) ? `Imported ${sidecar.labels.length} independent ball labels.` : `Imported ${schedule.length} scheduled ball-label frames.`);
@@ -523,6 +548,12 @@ export default function AITracker() {
       <div className="mt-5 border-t border-line pt-4">
         <h3 className="font-semibold">Independent ball identity labels</h3>
         <p className="mt-1 text-sm text-muted">Pause on a frame and draw a tight box when the ball is visible. Use <strong>Ball temporarily occluded</strong> only when the ball is known to remain in play but is fully hidden at that instant. Use <strong>No ball in scene</strong> when it is truly absent or outside the frame. These labels are never created from tracker output.</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <select className="input" aria-label="Ball appearance" value={ballAppearance} onChange={(event) => setBallAppearance(event.target.value)}><option value="">Ball appearance</option><option value="orange">Orange</option><option value="black">Black</option><option value="other">Other</option></select>
+          <input className="input" aria-label="Pseudonymous player ID" placeholder="Pseudonymous player ID" value={capturePlayerId} onChange={(event) => setCapturePlayerId(event.target.value)} />
+          <input className="input" aria-label="Lighting condition" placeholder="Lighting condition" value={captureLighting} onChange={(event) => setCaptureLighting(event.target.value)} />
+          <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={captureHardNegative} onChange={(event) => setCaptureHardNegative(event.target.checked)} /> Hard-negative footage</label>
+        </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button className="btn-ghost" onClick={() => { const video = videoRef.current; if (!video) return; video.pause(); video.currentTime = Math.max(0, video.currentTime - 0.1); drawBallAnnotation(null); }}>-0.1s</button>
           <button className="btn-ghost" onClick={() => { const video = videoRef.current; if (!video) return; video.pause(); video.currentTime = Math.min(video.duration || 0, video.currentTime + 0.1); drawBallAnnotation(null); }}>+0.1s</button>
@@ -538,6 +569,15 @@ export default function AITracker() {
             setDrawingBallBox(false); setBallDrag(null); drawBallAnnotation(label);
           }}>No ball in scene</button>
           <label className="btn-ghost cursor-pointer">Import ball labels<input type="file" accept="application/json" className="sr-only" onChange={(event) => { void importBallLabels(event.target.files?.[0]); event.target.value = ""; }} /></label>
+          <button className="btn-ghost" disabled={ballScheduleMs.length > 0} onClick={() => {
+            const durationMs = (videoRef.current?.duration ?? 0) * 1000;
+            try {
+              const schedule = createUniformBallLabelSchedule(durationMs, 20);
+              setBallScheduleMs(schedule);
+              if (videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = schedule[0] / 1000; drawBallAnnotation(null); }
+              setStatus(`Created a ${schedule.length}-frame schedule from clip duration only; label it before reviewing detector output.`);
+            } catch (error) { setStatus(error instanceof Error ? error.message : "Could not create ball-label schedule."); }
+          }}>Create 20-frame schedule</button>
           <button className="btn-ghost" disabled={!ballLabels.length} onClick={downloadBallLabels}>Export ball labels</button>
           {ballScheduleMs.length > 0 && <button className="btn-ghost" onClick={() => {
             const next = ballScheduleMs.find((timeMs) => !ballLabels.some((label) => label.timeMs === timeMs));

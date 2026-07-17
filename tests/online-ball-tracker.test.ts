@@ -132,3 +132,40 @@ test("optionally lets a strong ball-sized learned detection replace a stale lock
   ]);
   assert.equal(result?.source, "detected"); assert.ok(result!.point.x > 0.7);
 });
+
+test("optionally switches from a stale lock after two coherent ball-sized motion candidates", () => {
+  const tracker = new OnlineBallTracker(500, 3.5, {
+    immediateDetectedMinimumConfidence: Number.POSITIVE_INFINITY,
+    challengerMotionMinimumConfidence: 0.18,
+    challengerMotionMinimumSize: 0.02,
+  });
+  tracker.seed(0, { x: 0.2, y: 0.5 });
+  const first = tracker.update(100, [
+    { point: { x: 0.21, y: 0.5 }, confidence: 0.7, source: "motion", apparentSize: 0.01 },
+    { point: { x: 0.7, y: 0.62 }, confidence: 0.22, source: "motion", apparentSize: 0.03 },
+  ]);
+  assert.ok(first!.point.x < 0.3);
+  const switched = tracker.update(200, [
+    { point: { x: 0.22, y: 0.5 }, confidence: 0.7, source: "motion", apparentSize: 0.01 },
+    { point: { x: 0.74, y: 0.64 }, confidence: 0.2, source: "motion", apparentSize: 0.03 },
+  ]);
+  assert.equal(switched?.source, "motion"); assert.ok(switched!.point.x > 0.7);
+});
+
+test("can disable coherent color challengers during an occlusion", () => {
+  const tracker = new OnlineBallTracker(500, 3.5, { challengerColorMinimumConfidence: 2 });
+  tracker.seed(0, { x: 0.2, y: 0.5 });
+  const distractor = (x: number) => [{ point: { x, y: 0.75 }, confidence: 0.7, source: "color" as const, apparentSize: 0.05 }];
+  assert.equal(tracker.update(100, distractor(0.7))?.predicted, true);
+  const result = tracker.update(200, distractor(0.72));
+  assert.equal(result?.predicted, true); assert.ok(result!.point.x < 0.4);
+});
+
+test("uses the calibrated default to recover a moderate-confidence learned ball", () => {
+  const tracker = new OnlineBallTracker(); tracker.seed(0, { x: 0.2, y: 0.5 });
+  const result = tracker.update(100, [
+    { point: { x: 0.21, y: 0.5 }, confidence: 0.7, source: "motion", apparentSize: 0.02 },
+    { point: { x: 0.75, y: 0.55 }, confidence: 0.1, source: "detected", apparentSize: 0.06 },
+  ]);
+  assert.equal(result?.source, "detected"); assert.ok(result!.point.x > 0.7);
+});

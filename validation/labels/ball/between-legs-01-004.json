@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "clipId": "between-legs-01-004",
+  "capture": { "ballAppearance": "orange", "playerId": "controlled-player-01", "lighting": "indoor-gym-fixed", "hardNegative": false },
   "protocol": {
     "name": "calibration-representative-independent-visual-v1",
     "scheduledTimesMs": [300, 900, 1500, 2200, 2800, 3400, 4000, 4600, 5200, 5900, 6500, 7100]

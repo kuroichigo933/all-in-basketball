@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { detectMovingBallPixelCandidates, detectMovingBallPixels, detectOrangeBallPixels } from "../lib/motion/colorBall.ts";
+import { detectMovingBallPixelCandidates, detectMovingBallPixels, detectOrangeBallPixelCandidates, detectOrangeBallPixels } from "../lib/motion/colorBall.ts";
 
 test("finds a compact orange basketball component", () => {
   const width = 40; const height = 30; const pixels = new Uint8ClampedArray(width * height * 4);
@@ -32,6 +32,15 @@ test("rejects elongated orange regions", () => {
   const width = 40; const height = 30; const pixels = new Uint8ClampedArray(width * height * 4);
   for (let x = 5; x < 30; x += 1) { const offset = (15 * width + x) * 4; pixels[offset] = 160; pixels[offset + 1] = 70; pixels[offset + 2] = 30; pixels[offset + 3] = 255; }
   assert.equal(detectOrangeBallPixels(pixels, width, height), null);
+});
+
+test("joins orange ball lobes split by a dark one-pixel seam", () => {
+  const width = 40; const height = 30; const pixels = new Uint8ClampedArray(width * height * 4);
+  for (let y = 12; y <= 18; y += 1) for (const [left, right] of [[15, 17], [19, 21]]) for (let x = left; x <= right; x += 1) {
+    const offset = (y * width + x) * 4; pixels[offset] = 170; pixels[offset + 1] = 75; pixels[offset + 2] = 30; pixels[offset + 3] = 255;
+  }
+  const results = detectOrangeBallPixelCandidates(pixels, width, height);
+  assert.equal(results.length, 1); assert.ok(Math.abs(results[0].center.x - 18 / width) < 0.02);
 });
 
 test("retains multiple compact motion candidates for temporal fusion", () => {

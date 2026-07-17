@@ -4,6 +4,8 @@ import { DEFAULT_MOVE_DETECTION_CONFIG, detectMoves, type MoveDetectionConfig } 
 import { combineEvaluations, evaluateDetections } from "../lib/motion/evaluate.ts";
 import { evaluateBallIdentity, type BallIdentityMetrics } from "../lib/motion/evaluateBall.ts";
 import { repeatabilityPasses, summarizeRepeatability } from "../lib/motion/repeatability.ts";
+import type { OnlineBallTrackerConfig } from "../lib/motion/onlineBallTracker.ts";
+import { replayBallTracking } from "../lib/motion/replayBallTracking.ts";
 import { assertUsableSampling } from "../lib/motion/sampling.ts";
 import { trackBallContinuity } from "../lib/motion/trackBall.ts";
 import { LIVE_MOVE_NAMES, selectSplit, validateManifest, type AnalysisExport, type ValidationSplit } from "../lib/motion/validation.ts";
@@ -47,6 +49,10 @@ if (process.argv[1]?.endsWith("evaluate-repeatability.ts")) {
   const config: MoveDetectionConfig = configPath
     ? { ...DEFAULT_MOVE_DETECTION_CONFIG, ...JSON.parse(readFileSync(resolve(configPath), "utf8")) }
     : { ...DEFAULT_MOVE_DETECTION_CONFIG };
+  const trackerConfigPath = option("--tracker-config");
+  const trackerConfig: Partial<OnlineBallTrackerConfig> | undefined = trackerConfigPath
+    ? JSON.parse(readFileSync(resolve(trackerConfigPath), "utf8"))
+    : undefined;
 
   const runs = runDirectories.map((runDirectory) => {
     const ballReports: BallIdentityMetrics[] = []; const moveRows: ReturnType<typeof evaluateDetections>[] = [];
@@ -57,7 +63,7 @@ if (process.argv[1]?.endsWith("evaluate-repeatability.ts")) {
         if (!existsSync(observationPath)) throw new Error(`Missing observations: ${observationPath}`);
         const data = JSON.parse(readFileSync(observationPath, "utf8")) as AnalysisExport;
         assertUsableSampling(data.observations, data.sampleIntervalMs, data.sampling);
-        const observations = trackBallContinuity(data.observations);
+        const observations = trackBallContinuity(trackerConfig ? replayBallTracking(data.observations, trackerConfig) : data.observations);
         const sidecarPath = resolve(dirname(manifestPath), "labels", "ball", `${clip.id}.json`);
         if (!existsSync(sidecarPath)) throw new Error(`Missing ball labels: ${sidecarPath}`);
         const labels = (JSON.parse(readFileSync(sidecarPath, "utf8")) as { labels?: unknown }).labels;
@@ -88,6 +94,7 @@ if (process.argv[1]?.endsWith("evaluate-repeatability.ts")) {
     moves: repeatabilityPasses(moveF1, maximumF1Spread),
     diagnosticPass: !failed && repeatabilityPasses(ballF1, maximumF1Spread) && repeatabilityPasses(moveF1, maximumF1Spread),
   };
-  console.log(JSON.stringify({ split, clips: clips.length, runs, ranges: { ballF1, candidateOracleRecall, moveF1 }, stability }, null, 2));
+  console.log(JSON.stringify({ split, clips: clips.length, trackerConfig: trackerConfigPath ? resolve(trackerConfigPath) : null,
+    runs, ranges: { ballF1, candidateOracleRecall, moveF1 }, stability }, null, 2));
   if (failed || !stability.diagnosticPass) process.exitCode = 1;
 }

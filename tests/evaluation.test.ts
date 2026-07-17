@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { combineEvaluations, evaluateDetections } from "../lib/motion/evaluate.ts";
+import { combineEvaluations, combineMoveConfusions, evaluateDetections, evaluateMoveConfusion } from "../lib/motion/evaluate.ts";
 
 test("matches move name and timestamp with tolerance", () => {
   const metrics = evaluateDetections(
@@ -30,4 +30,31 @@ test("combines clip counts without macro-average distortion", () => {
   assert.equal(metrics.falseNegatives, 1);
   assert.ok(Math.abs(metrics.f1 - 20 / 21) < 0.0001);
   assert.equal(metrics.meets95Percent, true);
+});
+
+test("reports temporally aligned class substitutions separately from misses", () => {
+  const report = evaluateMoveConfusion([
+    { move: "behind-the-back", startMs: 1000, endMs: 1300 },
+    { move: "behind-the-back", startMs: 2000, endMs: 2300 },
+  ], [
+    { move: "crossover", startMs: 1050, endMs: 1350, confidence: 0.8, evidence: [] },
+    { move: "hesitation", startMs: 4000, endMs: 4300, confidence: 0.7, evidence: [] },
+  ]);
+  assert.equal(report.matched["behind-the-back"]?.crossover, 1);
+  assert.equal(report.missed["behind-the-back"], 1);
+  assert.equal(report.spurious.hesitation, 1);
+});
+
+test("matches rapid neighboring events one-to-one by nearest center and combines reports", () => {
+  const report = evaluateMoveConfusion([
+    { move: "crossover", startMs: 1000, endMs: 1200 },
+    { move: "between-the-legs", startMs: 1400, endMs: 1600 },
+  ], [
+    { move: "between-the-legs", startMs: 1420, endMs: 1620, confidence: 0.8, evidence: [] },
+    { move: "crossover", startMs: 1020, endMs: 1220, confidence: 0.8, evidence: [] },
+  ]);
+  const combined = combineMoveConfusions([report, report]);
+  assert.equal(combined.matched.crossover?.crossover, 2);
+  assert.equal(combined.matched["between-the-legs"]?.["between-the-legs"], 2);
+  assert.deepEqual(combined.missed, {}); assert.deepEqual(combined.spurious, {});
 });

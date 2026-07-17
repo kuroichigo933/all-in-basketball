@@ -34,9 +34,11 @@ test("replay honors player-gated measurement acceptance", () => {
 
 test("builds a finite calibration grid for immediate learned-detection overrides", () => {
   const grid = buildBallTrackerConfigGrid();
-  assert.equal(grid.length, 48);
+  assert.equal(grid.length, 3072);
   assert.ok(grid.every((config) => Number.isFinite(config.immediateDetectedMinimumConfidence) &&
-    config.immediateDetectedMinimumSize < config.immediateDetectedMaximumSize));
+    config.immediateDetectedMinimumSize < config.immediateDetectedMaximumSize &&
+    Number.isFinite(config.challengerMotionMinimumConfidence) && config.challengerMotionMinimumSize > 0 &&
+    Number.isFinite(config.challengerColorMinimumConfidence)));
 });
 
 test("uses move F1 to break an exact ball-identity tuning tie", () => {
@@ -44,4 +46,17 @@ test("uses move F1 to break an exact ball-identity tuning tie", () => {
   const candidate = { metrics: { f1: 0.68, precision: 0.66 }, moves: { f1: 0.34, precision: 0.35 } };
   assert.equal(isBetterBallTrackerScore(candidate, current), true);
   assert.equal(isBetterBallTrackerScore(current, candidate), false);
+});
+
+test("treats an omitted occlusion rate as zero when breaking later ties", () => {
+  const current = { metrics: { f1: 0.68, precision: 0.66 }, moves: { f1: 0.3, precision: 0.4 } };
+  const candidate = { metrics: { f1: 0.68, precision: 0.66, occlusionPredictionRate: 0 }, moves: { f1: 0.34, precision: 0.35 } };
+  assert.equal(isBetterBallTrackerScore(candidate, current), true);
+  assert.equal(isBetterBallTrackerScore(current, candidate), false);
+});
+
+test("uses occlusion prediction persistence before move F1 to break a ball-identity tie", () => {
+  const current = { metrics: { f1: 0.68, precision: 0.66, occlusionPredictionRate: 0 }, moves: { f1: 0.4, precision: 0.4 } };
+  const candidate = { metrics: { f1: 0.68, precision: 0.64, occlusionPredictionRate: 0.5 }, moves: { f1: 0.3, precision: 0.3 } };
+  assert.equal(isBetterBallTrackerScore(candidate, current), true);
 });
