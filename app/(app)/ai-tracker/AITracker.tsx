@@ -17,6 +17,7 @@ import { applyPoseBallPrior } from "@/lib/motion/ballCandidate";
 import { mapPointFromCrop, selectPoseBallCrop, selectPoseBallFocusCrop, type NormalizedCrop } from "@/lib/motion/poseCrop";
 import { evaluateBallIdentity, validateBallIdentityEvaluationLabels, type BallIdentityEvaluationLabel } from "@/lib/motion/evaluateBall";
 import { GENERIC_BALL_MODEL, MediaPipeBallDetector, resolvePreferredBallModel, type BallModelConfig, type BrowserBallDetector } from "@/lib/motion/browserBallDetector";
+import { rankBallCandidates } from "@/lib/motion/calibratedBallCandidateRanker";
 
 const SAMPLE_INTERVAL_MS = 100;
 const MAX_CLIP_SECONDS = 60;
@@ -191,9 +192,9 @@ export default function AITracker() {
     previousFramePixelsRef.current = pixels;
     return [
       ...orange.map((candidate) => ({ point: candidate.center, confidence: candidate.confidence, source: "color" as const,
-        apparentSize: candidate.apparentSize })),
+        apparentSize: candidate.apparentSize, appearanceConfidence: candidate.appearanceConfidence })),
       ...moving.map((candidate) => ({ point: candidate.center, confidence: candidate.confidence, source: "motion" as const,
-        apparentSize: candidate.apparentSize })),
+        apparentSize: candidate.apparentSize, appearanceConfidence: candidate.appearanceConfidence })),
     ].map((measurement) => applyPoseBallPrior(measurement, points));
   }
 
@@ -215,7 +216,8 @@ export default function AITracker() {
       return objectsRef.current!.detectForVideo(objectInput, timestamp)
         .map((candidate) => ({ point: renderedCrop ? mapPointFromCrop(candidate.point, renderedCrop) : candidate.point,
           confidence: candidate.confidence, source: "detected" as const, detectorId: candidate.detectorId,
-          apparentSize: renderedCrop ? candidate.apparentSize * Math.sqrt(renderedCrop.width * renderedCrop.height) : candidate.apparentSize }));
+          apparentSize: renderedCrop ? candidate.apparentSize * Math.sqrt(renderedCrop.width * renderedCrop.height) : candidate.apparentSize,
+          appearanceConfidence: candidate.appearanceConfidence }));
     };
     let modelMeasurements = detectInCrop(crop, inferenceTimestamp);
     if (!modelMeasurements.length && crop) {
@@ -226,16 +228,21 @@ export default function AITracker() {
     const poseConfidence = points.length ? points.reduce((sum, point) => sum + (point.visibility ?? 1), 0) / points.length : 0;
     const measurements = detectVisualBalls(video, points);
     measurements.push(...modelMeasurements);
+    const rankedMeasurements = rankBallCandidates(measurements, {
+      leftWrist: landmark(points, 15), rightWrist: landmark(points, 16), leftHip: landmark(points, 23),
+      rightHip: landmark(points, 24), leftKnee: landmark(points, 25), rightKnee: landmark(points, 26),
+    });
     // Do not acquire a ball from full-frame background motion when no player
     // pose is reliable. An existing track still receives an empty update and
     // may predict through the normal short loss window.
-    const ballTrack = onlineBallTrackerRef.current.update(timeMs, measurements, Boolean(crop)); const ball = ballTrack?.point ?? null;
+    const ballTrack = onlineBallTrackerRef.current.update(timeMs, rankedMeasurements, Boolean(crop)); const ball = ballTrack?.point ?? null;
     const ballConfidence = ballTrack?.confidence ?? 0; previousBallRef.current = ball;
     const observation: MotionObservation = { timeMs, poseConfidence, playerDetected: Boolean(crop), ballConfidence, ball, ballSource: ballTrack?.source ?? "missing", ballMeasured: Boolean(ballTrack && !ballTrack.predicted), ballMeasurement: ballTrack?.measurementPoint, ballDetectorId: ballTrack?.detectorId,
       ballMeasurementSize: ballTrack?.apparentSize,
-      ballCandidates: measurements.map((measurement) => ({ point: { ...measurement.point }, confidence: measurement.confidence,
+      ballCandidates: rankedMeasurements.map((measurement) => ({ point: { ...measurement.point }, confidence: measurement.confidence,
         source: measurement.source as "detected" | "color" | "motion", detectorId: measurement.detectorId,
-        apparentSize: measurement.apparentSize })),
+        apparentSize: measurement.apparentSize, appearanceConfidence: measurement.appearanceConfidence,
+        identityConfidence: measurement.identityConfidence })),
       leftShoulder: landmark(points, 11), rightShoulder: landmark(points, 12), leftWrist: landmark(points, 15), rightWrist: landmark(points, 16),
       leftHip: landmark(points, 23), rightHip: landmark(points, 24), leftKnee: landmark(points, 25), rightKnee: landmark(points, 26) };
     return { observation, points };

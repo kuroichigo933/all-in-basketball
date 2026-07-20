@@ -1,4 +1,5 @@
 import { OnlineBallTracker, type OnlineBallTrackerConfig } from "./onlineBallTracker.ts";
+import { poseContextFromObservation, rankBallCandidates } from "./calibratedBallCandidateRanker.ts";
 import type { MotionObservation } from "./types.ts";
 
 /** Replays saved pre-association candidates without rerunning browser vision models. */
@@ -10,7 +11,8 @@ export function replayBallTracking(
   return observations.map((observation) => {
     if (!Array.isArray(observation.ballCandidates)) throw new Error(`Observation at ${observation.timeMs} ms has no candidate snapshot.`);
     const playerDetected = observation.playerDetected ?? observation.poseConfidence >= 0.35;
-    const track = tracker.update(observation.timeMs, observation.ballCandidates, playerDetected);
+    const candidates = rankBallCandidates(observation.ballCandidates, poseContextFromObservation(observation));
+    const track = tracker.update(observation.timeMs, candidates, playerDetected);
     return {
       ...observation,
       ball: track?.point ?? null,
@@ -20,6 +22,7 @@ export function replayBallTracking(
       ballMeasurement: track?.measurementPoint,
       ballDetectorId: track?.detectorId,
       ballMeasurementSize: track?.apparentSize,
+      ballCandidates: candidates,
     };
   });
 }

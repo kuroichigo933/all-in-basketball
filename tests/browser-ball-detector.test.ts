@@ -20,6 +20,6 @@ test("normalizes matching model boxes and preserves detector provenance", () => 
   }, { id: "custom-v1", assetPath: "/model.tflite", labels: ["basketball"], custom: true });
   const candidates = detector.detectForVideo({ width: 100, height: 50 } as HTMLCanvasElement, 10);
   assert.deepEqual(candidates, [{ point: { x: 0.5, y: 0.6 }, confidence: 0.8, detectorId: "custom-v1",
-    apparentSize: Math.sqrt((20 / 100) * (20 / 50)) }]);
+    apparentSize: Math.sqrt((20 / 100) * (20 / 50)), appearanceConfidence: 1 }]);
   detector.close(); assert.equal(closed, true);
 });

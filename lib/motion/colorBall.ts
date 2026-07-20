@@ -1,7 +1,7 @@
 import type { Point } from "./types.ts";
 
 export type NormalizedBounds = { left: number; top: number; right: number; bottom: number };
-export type ColorBallCandidate = { center: Point; confidence: number; pixels: number; apparentSize: number };
+export type ColorBallCandidate = { center: Point; confidence: number; pixels: number; apparentSize: number; appearanceConfidence: number };
 
 export function detectOrangeBallPixelCandidates(
   rgba: Uint8ClampedArray,
@@ -45,8 +45,9 @@ export function detectOrangeBallPixelCandidates(
     const continuity = previous ? Math.max(0, 1 - Math.hypot(center.x - previous.x, center.y - previous.y) * 3) : 0.5;
     const apparentSize = Math.sqrt(pixels / (width * height));
     const sizeScore = Math.min(1, pixels / 45); const score = aspect * 0.3 + fill * 0.25 + continuity * 0.3 + sizeScore * 0.15;
+    const appearanceConfidence = aspect * 0.5 + fill * 0.3 + sizeScore * 0.2;
     candidates.push({ candidate: { center, confidence: Math.min(0.72, Math.max(0.12, score * 0.72)), pixels,
-      apparentSize }, score });
+      apparentSize, appearanceConfidence }, score });
   }
   return candidates.sort((a, b) => b.score - a.score || b.candidate.pixels - a.candidate.pixels)
     .slice(0, Math.max(0, maximumCandidates)).map(({ candidate }) => candidate);
@@ -113,8 +114,9 @@ export function detectMovingBallPixelCandidates(
     const apparentSize = Math.sqrt(pixels / (width * height));
     const sizeScore = Math.exp(-0.5 * (Math.log(pixels / 70) / 1.1) ** 2);
     const score = aspect * 0.2 + fill * 0.12 + continuity * 0.2 + sizeScore * 0.24 + contrast * 0.24;
+    const appearanceConfidence = aspect * 0.35 + fill * 0.15 + sizeScore * 0.25 + contrast * 0.25;
     candidates.push({ candidate: { center, confidence: Math.min(0.68, Math.max(0.1, score * 0.7)), pixels,
-      apparentSize }, score });
+      apparentSize, appearanceConfidence }, score });
   }
   return candidates.sort((a, b) => b.score - a.score || b.candidate.pixels - a.candidate.pixels)
     .slice(0, Math.max(0, maximumCandidates)).map(({ candidate }) => candidate);

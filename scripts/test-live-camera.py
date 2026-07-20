@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -22,7 +23,7 @@ async def main():
         page.on("console", lambda message: diagnostics["consoleErrors"].append(message.text) if message.type == "error" else None)
         page.on("pageerror", lambda error: diagnostics["pageErrors"].append(str(error)))
         page.on("requestfailed", lambda request: diagnostics["failedRequests"].append({"url": request.url, "failure": request.failure}))
-        await page.goto("http://127.0.0.1:3000/validation-runner", wait_until="domcontentloaded", timeout=60_000)
+        await page.goto(f"{os.environ.get('LIVE_CAMERA_BASE_URL', 'http://127.0.0.1:3000')}/validation-runner", wait_until="domcontentloaded", timeout=60_000)
         await page.wait_for_timeout(2_000)
         await page.get_by_role("button", name="Start front camera").click()
         try:

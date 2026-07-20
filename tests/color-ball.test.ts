@@ -9,6 +9,7 @@ test("finds a compact orange basketball component", () => {
   }
   const result = detectOrangeBallPixels(pixels, width, height);
   assert.ok(result); assert.ok(Math.abs(result.center.x - 26 / width) < 0.03); assert.ok(result.confidence >= 0.25);
+  assert.ok(result.appearanceConfidence > 0.6);
 });
 
 test("finds a compact moving black basketball", () => {
@@ -18,6 +19,7 @@ test("finds a compact moving black basketball", () => {
   }
   const result = detectMovingBallPixels(current, previous, width, height);
   assert.ok(result); assert.ok(Math.abs(result.center.x - 26 / width) < 0.03);
+  assert.ok(result.appearanceConfidence > 0.5);
 });
 
 test("moving-ball fallback is color independent", () => {

@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { OnlineBallTracker } from "../lib/motion/onlineBallTracker.ts";
+import { DEFAULT_ONLINE_BALL_TRACKER_CONFIG, OnlineBallTracker } from "../lib/motion/onlineBallTracker.ts";
+
+const candidate = (x: number, y: number, confidence: number, source: "detected" | "color" | "motion", apparentSize?: number) =>
+  ({ point: { x, y }, confidence, source, apparentSize });
 
 test("fuses candidates by continuity instead of confidence alone", () => {
   const tracker = new OnlineBallTracker(); tracker.seed(0, { x: 0.2, y: 0.5 });
@@ -124,6 +127,7 @@ test("optionally lets a strong ball-sized learned detection replace a stale lock
     immediateDetectedMinimumConfidence: 0.3,
     immediateDetectedMinimumSize: 0.04,
     immediateDetectedMaximumSize: 0.09,
+    immediateDetectedMaximumDistance: 1.5,
   });
   tracker.seed(0, { x: 0.2, y: 0.5 });
   const result = tracker.update(100, [
@@ -161,11 +165,104 @@ test("can disable coherent color challengers during an occlusion", () => {
   assert.equal(result?.predicted, true); assert.ok(result!.point.x < 0.4);
 });
 
-test("uses the calibrated default to recover a moderate-confidence learned ball", () => {
+test("uses the calibrated default to confirm a distant moderate-confidence learned ball", () => {
   const tracker = new OnlineBallTracker(); tracker.seed(0, { x: 0.2, y: 0.5 });
-  const result = tracker.update(100, [
+  const first = tracker.update(100, [
     { point: { x: 0.21, y: 0.5 }, confidence: 0.7, source: "motion", apparentSize: 0.02 },
     { point: { x: 0.75, y: 0.55 }, confidence: 0.1, source: "detected", apparentSize: 0.06 },
   ]);
+  assert.equal(first?.source, "motion");
+  const result = tracker.update(200, [
+    { point: { x: 0.22, y: 0.5 }, confidence: 0.7, source: "motion", apparentSize: 0.02 },
+    { point: { x: 0.77, y: 0.55 }, confidence: 0.1, source: "detected", apparentSize: 0.06 },
+  ]);
   assert.equal(result?.source, "detected"); assert.ok(result!.point.x > 0.7);
+});
+
+test("uses repeat-robust challenger thresholds in the live default", () => {
+  assert.deepEqual({
+    motionConfidence: DEFAULT_ONLINE_BALL_TRACKER_CONFIG.challengerMotionMinimumConfidence,
+    motionSize: DEFAULT_ONLINE_BALL_TRACKER_CONFIG.challengerMotionMinimumSize,
+    colorConfidence: DEFAULT_ONLINE_BALL_TRACKER_CONFIG.challengerColorMinimumConfidence,
+    immediateDistance: DEFAULT_ONLINE_BALL_TRACKER_CONFIG.immediateDetectedMaximumDistance,
+    sizeWeight: DEFAULT_ONLINE_BALL_TRACKER_CONFIG.associationSizeWeight,
+    appearanceWeight: DEFAULT_ONLINE_BALL_TRACKER_CONFIG.associationAppearanceWeight,
+    challengerAppearanceWeight: DEFAULT_ONLINE_BALL_TRACKER_CONFIG.challengerAppearanceWeight,
+    identityQualityWeight: DEFAULT_ONLINE_BALL_TRACKER_CONFIG.identityQualityWeight,
+    identityOverride: DEFAULT_ONLINE_BALL_TRACKER_CONFIG.identityOverrideMinimumConfidence,
+    measurementGain: DEFAULT_ONLINE_BALL_TRACKER_CONFIG.measurementCorrectionGain,
+    velocityGain: DEFAULT_ONLINE_BALL_TRACKER_CONFIG.velocityCorrectionGain,
+  }, { motionConfidence: 0.2, motionSize: 0.035, colorConfidence: 0.25, immediateDistance: 0.3,
+    sizeWeight: 0.15, appearanceWeight: 0.3, challengerAppearanceWeight: 0,
+    identityQualityWeight: 0, identityOverride: 2,
+    measurementGain: 1, velocityGain: 0.35 });
+});
+
+test("requires a distant learned candidate to confirm when immediate override distance is bounded", () => {
+  const tracker = new OnlineBallTracker(500, 3.5, { immediateDetectedMaximumDistance: 0.2 });
+  tracker.update(0, [candidate(0.25, 0.5, 0.8, "color", 0.05)]);
+  tracker.update(100, [candidate(0.26, 0.5, 0.8, "color", 0.05)]);
+  const firstChallenge = tracker.update(200, [candidate(0.8, 0.5, 0.9, "detected", 0.06)]);
+  assert.ok(firstChallenge); assert.ok(firstChallenge.point.x < 0.4);
+  const confirmed = tracker.update(300, [candidate(0.81, 0.5, 0.9, "detected", 0.06)]);
+  assert.ok(confirmed); assert.ok(confirmed.point.x > 0.7);
+});
+
+test("can use apparent-size continuity to disambiguate equally close candidates", () => {
+  const tracker = new OnlineBallTracker(500, 3.5, { associationQualityWeight: 0.2, associationSizeWeight: 0.6,
+    immediateDetectedMinimumConfidence: 2 });
+  tracker.update(0, [candidate(0.4, 0.5, 0.8, "color", 0.05)]);
+  tracker.update(100, [candidate(0.41, 0.5, 0.8, "color", 0.05)]);
+  const track = tracker.update(200, [
+    candidate(0.42, 0.5, 0.75, "motion", 0.1),
+    candidate(0.44, 0.5, 0.7, "motion", 0.05),
+  ]);
+  assert.ok(track?.measurementPoint?.x && track.measurementPoint.x > 0.43);
+});
+
+test("can use color-neutral appearance evidence to disambiguate equally close candidates", () => {
+  const tracker = new OnlineBallTracker(500, 3.5, { associationQualityWeight: 0.2, associationSizeWeight: 0,
+    associationAppearanceWeight: 0.7, immediateDetectedMinimumConfidence: 2 });
+  tracker.seed(0, { x: 0.5, y: 0.5 });
+  const track = tracker.update(100, [
+    { point: { x: 0.48, y: 0.5 }, confidence: 0.8, source: "motion", appearanceConfidence: 0.2 },
+    { point: { x: 0.52, y: 0.5 }, confidence: 0.6, source: "motion", appearanceConfidence: 0.95 },
+  ]);
+  assert.ok(track?.measurementPoint); assert.ok(track.measurementPoint.x > 0.5);
+});
+
+test("can emit the accepted measurement without positional lag", () => {
+  const tracker = new OnlineBallTracker(500, 3.5, { measurementCorrectionGain: 1,
+    immediateDetectedMinimumConfidence: 2 });
+  tracker.seed(0, { x: 0.4, y: 0.5 });
+  const track = tracker.update(100, [candidate(0.5, 0.55, 0.7, "motion", 0.05)]);
+  assert.deepEqual(track?.point, { x: 0.5, y: 0.55 });
+});
+
+test("can use appearance to choose between coherent distant identity challengers", () => {
+  const tracker = new OnlineBallTracker(500, 3.5, { immediateDetectedMinimumConfidence: 2,
+    challengerAppearanceWeight: 0.8 });
+  tracker.seed(0, { x: 0.2, y: 0.5 });
+  const candidates = (offset: number) => [
+    { point: { x: 0.21 + offset, y: 0.5 }, confidence: 0.7, source: "motion" as const,
+      apparentSize: 0.01, appearanceConfidence: 0.2 },
+    { point: { x: 0.65 + offset, y: 0.55 }, confidence: 0.8, source: "motion" as const,
+      apparentSize: 0.05, appearanceConfidence: 0.1 },
+    { point: { x: 0.75 + offset, y: 0.55 }, confidence: 0.4, source: "motion" as const,
+      apparentSize: 0.05, appearanceConfidence: 0.95 },
+  ];
+  assert.ok(tracker.update(100, candidates(0))!.point.x < 0.3);
+  const switched = tracker.update(200, candidates(0.01));
+  assert.ok(switched); assert.ok(switched.point.x > 0.7);
+});
+
+test("can immediately recover a distant calibration-ranker identity", () => {
+  const tracker = new OnlineBallTracker(500, 3.5, { immediateDetectedMinimumConfidence: 2,
+    identityOverrideMinimumConfidence: 0.9 });
+  tracker.seed(0, { x: 0.2, y: 0.5 });
+  const recovered = tracker.update(100, [
+    { point: { x: 0.22, y: 0.5 }, confidence: 0.8, source: "motion", identityConfidence: 0.1 },
+    { point: { x: 0.75, y: 0.6 }, confidence: 0.25, source: "motion", identityConfidence: 0.98 },
+  ]);
+  assert.ok(recovered); assert.ok(recovered.point.x > 0.7);
 });

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { centerErrorRadii, evaluateBallIdentity, validateBallIdentityEvaluationLabels, validateBallIdentityLabels, type BallIdentityEvaluationLabel, type BallIdentityLabel, type BallIdentityObservation } from "../lib/motion/evaluateBall.ts";
+import { microBallIdentityMetrics, parseBallEvaluationArgs, requireUniqueBallEvaluationClipIds } from "../scripts/evaluate-ball-validation.ts";
 
 const visible = (timeMs: number, x = 0.4, y = 0.5): BallIdentityLabel => ({
   timeMs, visibility: "visible", box: { x: x - 0.05, y: y - 0.05, width: 0.1, height: 0.1 },
@@ -119,4 +120,24 @@ test("reports candidate-set oracle recall separately from the selected track", (
   assert.equal(report.tracked.recall, 0);
   assert.equal(report.candidateOracle.available, true);
   assert.equal(report.candidateOracle.visibleRecall, 1);
+});
+
+test("parses source-aware multi-manifest ball evaluation without allowing duplicate clips", () => {
+  assert.deepEqual(parseBallEvaluationArgs([
+    "--manifest", "primary.json", "--additional-manifests", "second.json,third.json", "--observation-dirs", "validation/local/a,validation/local/b,validation/local/c", "--split", "calibration",
+  ]), {
+    manifest: "primary.json", additionalManifests: ["second.json", "third.json"],
+    observationDirs: ["validation/local/a", "validation/local/b", "validation/local/c"], split: "calibration", allowIncomplete: false,
+  });
+  assert.throws(() => parseBallEvaluationArgs(["--split", "other"]), /Invalid validation split/);
+  assert.throws(() => requireUniqueBallEvaluationClipIds([{ id: "same" }, { id: "same" }]), /Duplicate ball-evaluation clip ID/);
+});
+
+test("combined ball metrics retain visible localization and negative rejection rates", () => {
+  const first = evaluateBallIdentity([visible(0), { timeMs: 100, visibility: "absent" }], [observation(0, 0.4), observation(100, null)]).tracked;
+  const second = evaluateBallIdentity([visible(0)], [observation(0, 0.8)]).tracked;
+  const combined = microBallIdentityMetrics([first, second]);
+  assert.equal(combined.visibleLocalizationRate, 0.5);
+  assert.equal(combined.negativeRejectionRate, 1);
+  assert.deepEqual([combined.matchedLabels, combined.unmatchedLabels], [3, 0]);
 });

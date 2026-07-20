@@ -44,8 +44,10 @@ This entire source is a **calibration cohort**. Tracker changes and threshold se
 |---|---:|
 | Segments / move labels | 5 / 71 |
 | Pose / measured-ball / tracked-ball coverage | 0.916418 / 0.887659 / 0.911540 |
-| Promoted live-default browser move F1 range | 0.519084-0.558140 |
-| Promoted live-default move F1 spread | 0.039056 (fails 0.03 diagnostic) |
+| Promoted combined-calibration ball F1 range | 0.772152-0.777070 |
+| Promoted combined-calibration ball F1 spread | 0.004918 (passes 0.03 diagnostic) |
+| Promoted combined-calibration move F1 range | 0.536170-0.538462 |
+| Promoted combined-calibration move F1 spread | 0.002291 (passes 0.03 diagnostic) |
 | Repeat-calibrated saved-config move F1 range | 0.551181-0.569106 |
 | Repeat-calibrated saved-config spread | 0.017925 (passes) |
 | Run-B saved-config precision / recall / F1 | 0.625000 / 0.492958 / 0.551181 |
@@ -54,13 +56,15 @@ This entire source is a **calibration cohort**. Tracker changes and threshold se
 
 The predeclared ball-identity slice contains 23 visible boxes, one absent-ball negative, and one full occlusion. Adjacent-frame inspection found one box centered above the visible ball; the ignored local sidecar was corrected from decoded pixels before the final evaluation. Two runs of the latest defaults measured tracked precision/recall/F1 of 0.695652-0.739130 and raw F1 of 0.711111-0.755556. The absent frame contains raw candidates but no reliable player, so it remained a true negative instead of a false track. Candidate-oracle recall was 22/23 (0.956522) in both runs. The occluded timestamp matched a measured candidate, not a prediction.
 
-The final tracker records complete pre-association candidate snapshots, demotes tiny color/motion fragments, joins orange lobes split by a one-pixel seam, weights full-ball components, and permits an immediate override from a learned detection of plausible size. Replay preserves the player-acceptance decision, so tuning cannot reintroduce no-player distractors. The tracker tuner now searches 3,072 learned-override and guarded motion/color challenger configurations. Disabling distant color challenges improved representative visible-ball replay F1 from 0.500000 to 0.589286 but remained at 0/4 valid occlusion predictions and slightly reduced mixed move F1, so it was not promoted. The move tuner evaluates 6,075 depth/anatomy configurations across multiple calibration repeats. Threshold-only tuning remains far below 95%, so a representative basketball-specific detector and denser labels remain necessary.
+The final tracker records complete pre-association candidate snapshots, demotes tiny color/motion fragments, joins orange lobes split by a one-pixel seam, and weights full-ball components. Candidate snapshots retain color-neutral roundness, fill, size plausibility, local contrast, and model-box shape. After the appearance search, a focused 16-configuration dynamics search with a 0.53 move-F1 floor selected full measurement correction and 0.35 velocity correction on both exports. Combined tracked F1 rises to 0.772152-0.777070; controlled replay F1 reaches 0.785714. All five occlusion labels still attach to measurements and none preserve a prediction.
+
+A subsequent six-configuration search applied the same appearance evidence to distant two-frame challenger ranking. Both A/B exports retained challenger appearance weight 0, so this seam remains available for a future learned appearance model but is not promoted as an accuracy gain.
 
 ### Fixed-configuration repeatability
 
 Browser exports can now target named ignored directories with `--output-dir`. `validation:repeatability` evaluates at least two distinct directories against one fixed saved move configuration, reports minimum/maximum/mean/spread for ball F1, candidate-oracle recall, and move F1, and fails its diagnostic when ball or move F1 spread exceeds 0.03 by default. This is a reproducibility diagnostic, not a release gate.
 
-Two independent adaptive-focus exports produced ball F1 0.695652-0.739130, a spread of 0.043478 that fails the 0.03 diagnostic. Candidate-oracle recall was 0.956522 in both runs. Promoted live-default move F1 ranged from 0.519084 to 0.558140 and also missed the stability limit. A repeat-calibrated saved configuration reached 0.551181-0.569106 with a passing 0.017925 spread, but its tighter pose thresholds were not promoted because they regressed the older cohort. Learned-candidate frame coverage was 0.854438-0.860355.
+The mixed-only appearance exports produce ball F1 0.739130-0.755556, while balanced controlled replay reaches 0.785714. Source-aware combined replay contains 79 visible labels and one absent label: promoted ball F1 is 0.772152-0.777070, candidate-oracle recall is 77/79 (0.974684), and the one absent label is rejected. Combined move F1 is 0.536170-0.538462. These runs reuse one controlled browser export and two mixed exports, so they are calibration stability evidence rather than independent holdout evidence.
 
 Reproduce the local workflow with:
 
@@ -73,6 +77,12 @@ npm run validation:tune-ball -- --manifest validation/local/manifests/mixed-move
 npm run validate:moves -- --manifest validation/local/manifests/mixed-moves-01.json --split calibration --config validation/local/mixed-moves-01-tuned-config.json
 npm run validate:moves -- --manifest validation/local/manifests/mixed-moves-01.json --split calibration --observations-dir validation/local/repeatability/adaptive-focus-b --config validation/local/repeat-robust-move-config.json
 npm run validation:ball -- --manifest validation/local/manifests/mixed-moves-01.json --split calibration
+npm run validation:ball -- --manifest validation/manifest.json --additional-manifests validation/local/manifests/mixed-moves-01.json --observation-dirs validation/local/candidate-training-sources,validation/local/repeatability/adaptive-focus-a --split calibration
+npm run validation:tune-ball -- --manifest validation/manifest.json --additional-manifests validation/local/manifests/mixed-moves-01.json --observation-dirs-by-manifest validation/local/candidate-training-sources,validation/local/repeatability/adaptive-focus-a --output validation/local/combined-ball-tracker-tuned.json
+npm run validation:tune-ball -- --manifest validation/manifest.json --additional-manifests validation/local/manifests/mixed-moves-01.json --observation-dirs-by-manifest validation/local/candidate-training-sources,validation/local/repeatability/adaptive-focus-a --tune-association --output validation/local/association-tuned-a.json
+npm run validation:tune-ball -- --manifest validation/manifest.json --additional-manifests validation/local/manifests/mixed-moves-01.json --observation-dirs-by-manifest validation/local/repeatability/appearance-a,validation/local/repeatability/appearance-b --tune-appearance --output validation/local/appearance-tuned-b.json
+npm run validation:tune-ball -- --manifest validation/manifest.json --additional-manifests validation/local/manifests/mixed-moves-01.json --observation-dirs-by-manifest validation/local/repeatability/appearance-a,validation/local/repeatability/appearance-b --tune-dynamics --minimum-move-f1 0.53 --output validation/local/dynamics-balanced-b.json
+npm run validation:tune-ball -- --manifest validation/manifest.json --additional-manifests validation/local/manifests/mixed-moves-01.json --observation-dirs-by-manifest validation/local/repeatability/appearance-a,validation/local/repeatability/appearance-b --tune-challenger --minimum-move-f1 0.53 --output validation/local/challenger-balanced-b.json
 python scripts/export-validation-observations.py --output-dir validation/local/repeatability/run-a --force mixed-moves-01-000
 npm run validation:repeatability -- --manifest validation/local/manifests/mixed-moves-01.json --runs validation/local/repeatability/run-a,validation/local/repeatability/run-b --config validation/local/repeat-robust-move-config.json
 ```
@@ -87,15 +97,15 @@ The current default pipeline produced:
 
 | Metric | Representative calibration result |
 |---|---:|
-| Visible labels localized | 24 / 56 |
-| Tracked precision / recall / F1 | 0.428571 / 0.428571 / 0.428571 |
-| Raw precision / recall / F1 | 0.428571 / 0.428571 / 0.428571 |
+| Visible labels localized by promoted replay | 44 / 56 |
+| Promoted replay precision / recall / F1 | 0.785714 / 0.785714 / 0.785714 |
+| Regenerated run-A raw precision / recall / F1 | 0.781818 / 0.767857 / 0.774775 |
 | Occlusion track presence | 4 / 4 |
 | Occlusion prediction persistence | 0 / 4 |
 | Occlusion measured distractor locks | 4 / 4 |
 | True absent-ball labels | 0 |
 
-High observation coverage therefore concealed wrong-object tracking in 32 of the 56 visible adjudicated frames. The default generic model supplied only 12 selected learned detections across 873 exported observations; color and motion heuristics supplied most measurements.
+The original browser export concealed wrong-object tracking in 32 of the 56 visible adjudicated frames. Regenerated observations plus promoted appearance/dynamics replay reduce the controlled visible errors to 12/56, but the result is calibration data and still lacks black-ball and absent-ball coverage.
 
 The calibration labels can now be reproduced as a local YOLO detector package with `validation:ball-dataset`, including multiple calibration manifests without admitting holdout clips. The combined controlled-plus-mixed export contains 77 training-eligible positive frames, two tiny partial positives retained for audit, five excluded full occlusions, and one true absent-ball negative across three source IDs, two players, and two indoor setups. Its collection-readiness report still blocks on 20 total negatives from at least two sources, black-ball coverage, and verified hard-negative footage. It is a pipeline fixture, not a sufficient training or validation dataset, and readiness is deliberately separate from accuracy.
 
@@ -118,12 +128,12 @@ npm run validation:ball -- --manifest validation/manifest.json --split calibrati
 
 ## Live browser diagnostics
 
-The latest controlled generated-camera smoke test ran at approximately 9.1-9.3 analyzed frames per second, reported 99% measured/tracked coverage, and continued advancing and tracking in expanded front-camera view.
+The controlled generated-camera smoke test with appearance-aware association ran at 8.1-8.2 analyzed frames per second, reported 98% measured and 99% tracked coverage, and continued advancing and tracking in expanded front-camera view. A later isolated development smoke with the promoted dynamics settings varied from 4.6-5.8 FPS and reported 99% measured and tracked coverage. Both pass the functional expanded-view smoke, but the observed 4.6-8.2 FPS range fails the approximate 10 FPS target. A production-server diagnostic was excluded because missing local Supabase configuration caused middleware failures.
 
 These are pipeline and coverage diagnostics only. A track existing in a frame does not prove that it belongs to the basketball. Identity accuracy requires independent ball boxes such as those evaluated above.
 
 ## Verification status
 
-The latest mixed-video implementation run passed 125/125 tests, strict TypeScript, the synthetic benchmark, and the production build. All named browser observation exports used in the report passed the sampling-cadence gates, and the ball-annotation schedule/metadata browser smoke passed. The separate expanded live-camera smoke test was not rerun in this cycle. Synthetic detector runtime and unit fixtures are useful regressions but are not real-video accuracy evidence.
+The latest mixed-video implementation run passed 139/139 tests, strict TypeScript, the synthetic benchmark, and the production build. All named browser observation exports used in the report passed the sampling-cadence gates; ball-annotation schedule/metadata and expanded live-camera smokes passed. Synthetic detector runtime and unit fixtures are useful regressions but are not real-video accuracy evidence.
 
-Latest documented mixed calibration run: 2026-07-15. Results apply only to the controlled frontal-view recordings described above.
+Latest documented mixed calibration run: 2026-07-16. Results apply only to the controlled frontal-view recordings described above.

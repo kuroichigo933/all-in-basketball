@@ -6,6 +6,10 @@ export type BallCandidateObservation = {
   source: "detected" | "color" | "motion";
   detectorId?: string;
   apparentSize?: number;
+  /** Color-neutral shape/contrast evidence computed before temporal association. */
+  appearanceConfidence?: number;
+  /** Calibration-cohort candidate identity ranker output; never a human label. */
+  identityConfidence?: number;
 };
 
 export type MotionObservation = {
