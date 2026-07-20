@@ -26,6 +26,13 @@ def parse_dataset(value: str) -> tuple[Path, Path]:
     return Path(manifest).resolve(), Path(observations).resolve()
 
 
+def display_path(path: Path) -> str:
+    try:
+        return path.relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def distance(first: dict, second: dict) -> float:
     return math.hypot(first["x"] - second["x"], first["y"] - second["y"])
 
@@ -67,7 +74,7 @@ def load_rows(datasets: list[tuple[Path, Path]]) -> tuple[list[tuple[str, list[l
             raise ValueError(f"{manifest_path} has no calibration clips")
         if any(clip["split"] != "calibration" for clip in calibration):
             raise ValueError("candidate ranker training may only read calibration clips")
-        provenance.append({"manifest": str(manifest_path), "observationsDirectory": str(observations_directory),
+        provenance.append({"manifest": display_path(manifest_path), "observationsDirectory": display_path(observations_directory),
                            "clips": [clip["id"] for clip in calibration]})
         for clip in calibration:
             labels_path = manifest_path.parent / "labels" / "ball" / f"{clip['id']}.json"

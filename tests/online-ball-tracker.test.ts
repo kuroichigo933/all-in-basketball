@@ -194,7 +194,7 @@ test("uses repeat-robust challenger thresholds in the live default", () => {
     velocityGain: DEFAULT_ONLINE_BALL_TRACKER_CONFIG.velocityCorrectionGain,
   }, { motionConfidence: 0.2, motionSize: 0.035, colorConfidence: 0.25, immediateDistance: 0.3,
     sizeWeight: 0.15, appearanceWeight: 0.3, challengerAppearanceWeight: 0,
-    identityQualityWeight: 0, identityOverride: 2,
+    identityQualityWeight: 0.75, identityOverride: 0.85,
     measurementGain: 1, velocityGain: 0.35 });
 });
 
@@ -262,7 +262,7 @@ test("can immediately recover a distant calibration-ranker identity", () => {
   tracker.seed(0, { x: 0.2, y: 0.5 });
   const recovered = tracker.update(100, [
     { point: { x: 0.22, y: 0.5 }, confidence: 0.8, source: "motion", identityConfidence: 0.1 },
-    { point: { x: 0.75, y: 0.6 }, confidence: 0.25, source: "motion", identityConfidence: 0.98 },
+    { point: { x: 0.75, y: 0.6 }, confidence: 0.02, source: "motion", identityConfidence: 0.98 },
   ]);
-  assert.ok(recovered); assert.ok(recovered.point.x > 0.7);
+  assert.ok(recovered); assert.ok(recovered.point.x > 0.7); assert.ok(recovered.confidence > 0.7);
 });

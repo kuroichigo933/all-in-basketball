@@ -1201,8 +1201,8 @@
     "epochs": 1200,
     "provenance": [
       {
-        "manifest": "C:\\VSCode\\all-in-basketball\\validation\\manifest.json",
-        "observationsDirectory": "C:\\VSCode\\all-in-basketball\\validation\\local\\repeatability\\appearance-a",
+        "manifest": "validation/manifest.json",
+        "observationsDirectory": "validation/local/repeatability/appearance-a",
         "clips": [
           "behind-back-01-000",
           "behind-back-01-002",
@@ -1212,8 +1212,8 @@
         ]
       },
       {
-        "manifest": "C:\\VSCode\\all-in-basketball\\validation\\local\\manifests\\mixed-moves-01.json",
-        "observationsDirectory": "C:\\VSCode\\all-in-basketball\\validation\\local\\repeatability\\appearance-a",
+        "manifest": "validation/local/manifests/mixed-moves-01.json",
+        "observationsDirectory": "validation/local/repeatability/appearance-a",
         "clips": [
           "mixed-moves-01-000",
           "mixed-moves-01-001",

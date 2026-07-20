@@ -13,11 +13,20 @@ export type MoveDetectionConfig = {
   maximumTorsoCenterTravelHipWidths: number;
   minimumKeypointConfidence: number;
   behindMaximumKneeSpreadHipWidths: number;
+  lateralBetweenLegsMinimumKneeSpreadHipWidths: number;
+  lateralBetweenLegsStrongKneeSpreadHipWidths: number;
+  betweenLegsVeryStrongKneeSpreadHipWidths: number;
+  /** Extreme stance in the prior 150 ms can survive a sparse sample at the handoff itself. */
+  betweenLegsRecentExtremeKneeSpreadHipWidths: number;
   poseTransferBallProximityHipWidths: number;
   poseTransferCrossoverMaximumWristDepthHipWidths: number;
+  poseTransferOutsideCorridorCrossoverMaximumWristDepthHipWidths: number;
+  poseTransferOutsideCorridorBetweenLegsMinimumWristDepthHipWidths: number;
+  poseTransferOutsideCorridorBetweenLegsMaximumWristDepthHipWidths: number;
   poseTransferMaximumTorsoTravelHipWidths: number;
   poseTransferConfirmationMs: number;
   poseTransferCooldownMs: number;
+  minimumLateralDurationMs: number;
   lateralWindowMs: number;
   centerlineMarginHipWidths: number;
   lateralTravelHipWidths: number;
@@ -38,10 +47,18 @@ export type MoveDetectionConfig = {
 export const DEFAULT_MOVE_DETECTION_CONFIG: Readonly<MoveDetectionConfig> = {
   minimumPoseConfidence: 0.35, minimumBallConfidence: 0.25, maximumObservationGapMs: 350,
   minimumScreenLateralTravel: 0.04, maximumTorsoCenterTravelHipWidths: 0.8,
-  minimumKeypointConfidence: 0.35, behindMaximumKneeSpreadHipWidths: 1.25,
-  poseTransferBallProximityHipWidths: 2.2, poseTransferCrossoverMaximumWristDepthHipWidths: -7,
+  minimumKeypointConfidence: 0.35, behindMaximumKneeSpreadHipWidths: 2.6,
+  lateralBetweenLegsMinimumKneeSpreadHipWidths: 2.58,
+  lateralBetweenLegsStrongKneeSpreadHipWidths: 2.62,
+  betweenLegsVeryStrongKneeSpreadHipWidths: 2.68,
+  betweenLegsRecentExtremeKneeSpreadHipWidths: 2.75,
+  poseTransferBallProximityHipWidths: 1, poseTransferCrossoverMaximumWristDepthHipWidths: -7,
+  poseTransferOutsideCorridorCrossoverMaximumWristDepthHipWidths: -5.8,
+  poseTransferOutsideCorridorBetweenLegsMinimumWristDepthHipWidths: -5.25,
+  poseTransferOutsideCorridorBetweenLegsMaximumWristDepthHipWidths: -4,
   poseTransferMaximumTorsoTravelHipWidths: 0.25,
-  poseTransferConfirmationMs: 250, poseTransferCooldownMs: 250,
+  poseTransferConfirmationMs: 250, poseTransferCooldownMs: 550,
+  minimumLateralDurationMs: 500,
   lateralWindowMs: 1400, centerlineMarginHipWidths: 0.18, lateralTravelHipWidths: 0.55,
   handProximityHipWidths: 2.2, lateralCrossoverMaximumWristDepthHipWidths: -7,
   minimumLegCorridorControlRatio: 0.35,
@@ -55,15 +72,15 @@ function quality(window: MotionObservation[]) {
   return window.reduce((sum, o) => sum + Math.min(o.poseConfidence, o.ballConfidence), 0) / window.length;
 }
 
-const SAME_MOVE_DEDUPE_GAP_MS = 80;
 const SAME_MOVE_CENTER_GAP_MS = 220;
 const COMPETING_MOVE_CENTER_GAP_MS = 200;
 
 function addIfDistinct(found: MoveDetection[], detection: MoveDetection) {
   const duplicateIndex = found.findIndex((candidate) =>
     candidate.move === detection.move &&
-    detection.startMs <= candidate.endMs + SAME_MOVE_DEDUPE_GAP_MS &&
-    detection.endMs >= candidate.startMs - SAME_MOVE_DEDUPE_GAP_MS);
+    (Math.abs((detection.startMs + detection.endMs) / 2 - (candidate.startMs + candidate.endMs) / 2) <= SAME_MOVE_CENTER_GAP_MS ||
+      Math.abs(detection.startMs - candidate.startMs) <= SAME_MOVE_CENTER_GAP_MS ||
+      Math.abs(detection.endMs - candidate.endMs) <= SAME_MOVE_CENTER_GAP_MS));
   if (duplicateIndex < 0) {
     found.push(detection);
     return;
@@ -153,7 +170,8 @@ export function detectMoves(observations: MotionObservation[], config: MoveDetec
     }
     const window = usable.slice(startIndex, endIndex + 1);
     const a = usable[startIndex]; const c = usable[endIndex];
-    if (c.timeMs - a.timeMs > config.lateralWindowMs || hasLargeObservationGap(window, config.maximumObservationGapMs)) continue;
+    if (c.timeMs - a.timeMs < config.minimumLateralDurationMs || c.timeMs - a.timeMs > config.lateralWindowMs ||
+      hasLargeObservationGap(window, config.maximumObservationGapMs)) continue;
     if (!isMeasuredBall(a) || !isMeasuredBall(c)) continue;
     const width = median(window.map(torsoWidth));
     const ax = (a.ball!.x - centerX(a)) / width;
@@ -188,6 +206,18 @@ export function detectMoves(observations: MotionObservation[], config: MoveDetec
         distance(observation.ball!, wrist) < observationWidth * config.handProximityHipWidths);
     }).length;
     const legCorridorControlRatio = legCorridorControlFrames / window.length;
+    const legCorridorBallFrames = window.filter((observation) => {
+      const observationWidth = torsoWidth(observation);
+      const observationHipBottom = Math.max(observation.leftHip.y, observation.rightHip.y);
+      const observationKneeBottom = Math.max(observation.leftKnee.y, observation.rightKnee.y);
+      const observationKneeLeft = Math.min(observation.leftKnee.x, observation.rightKnee.x);
+      const observationKneeRight = Math.max(observation.leftKnee.x, observation.rightKnee.x);
+      return isMeasuredBall(observation) && observation.ball!.x > observationKneeLeft && observation.ball!.x < observationKneeRight &&
+        observation.ball!.y > observationHipBottom + observationWidth * config.legRegionHipMargin && observation.ball!.y < observationKneeBottom;
+    }).length;
+    const legCorridorBallRatio = legCorridorBallFrames / window.length;
+    const kneeSpreadHipWidths = median(window.map((observation) =>
+      Math.abs(observation.leftKnee.x - observation.rightKnee.x) / torsoWidth(observation)));
     const wristDepths = [crossingIndex, crossingIndex + 1].flatMap((index) => {
       const observation = usable[index]; const observationWidth = torsoWidth(observation);
       const hipDepth = ((observation.leftHip.z ?? 0) + (observation.rightHip.z ?? 0)) / 2;
@@ -196,22 +226,53 @@ export function detectMoves(observations: MotionObservation[], config: MoveDetec
         .map((depth) => (depth - hipDepth) / observationWidth);
     });
     const crossoverDepthSupported = !wristDepths.length || Math.min(...wristDepths) < config.lateralCrossoverMaximumWristDepthHipWidths;
-    if (throughLegRegion && legCorridorControlRatio >= config.minimumLegCorridorControlRatio) {
+    const centeredBelowHips = crossing.ball.x > legLeft && crossing.ball.x < legRight &&
+      crossing.ball.y > hipBottom + width * config.legRegionHipMargin;
+    const betweenLegsStanceSupported = kneeSpreadHipWidths >= config.lateralBetweenLegsStrongKneeSpreadHipWidths ||
+      kneeSpreadHipWidths >= config.lateralBetweenLegsMinimumKneeSpreadHipWidths &&
+        legCorridorControlRatio >= config.minimumLegCorridorControlRatio;
+    // Sparse 10 Hz inference can bracket the actual low crossing with two
+    // higher samples. Preserve the measured in-corridor ball/hand evidence
+    // from the rest of the transfer window instead of classifying that
+    // interpolation artifact as a crossover or behind-the-back move.
+    const temporalBetweenLegsSupported = kneeSpreadHipWidths >= config.lateralBetweenLegsMinimumKneeSpreadHipWidths &&
+      legCorridorControlRatio >= config.minimumLegCorridorControlRatio && legCorridorBallRatio >= 0.2;
+    const depthBandBetweenLegsSupported = kneeSpreadHipWidths >= config.lateralBetweenLegsMinimumKneeSpreadHipWidths &&
+      wristDepths.some((depth) => depth >= config.poseTransferOutsideCorridorBetweenLegsMinimumWristDepthHipWidths &&
+        depth <= config.poseTransferOutsideCorridorBetweenLegsMaximumWristDepthHipWidths);
+    // In very wide stances, 10 Hz samples can miss the instant the ball is
+    // inside the leg corridor entirely. Requiring sustained in-corridor wrist
+    // control keeps this fallback anatomical rather than stance-only.
+    const wideStanceBetweenLegsSupported = kneeSpreadHipWidths >= config.betweenLegsVeryStrongKneeSpreadHipWidths &&
+      legCorridorControlRatio >= config.minimumLegCorridorControlRatio;
+    const projectedBehindDepthSupported = wristDepths.length > 0 && !crossoverDepthSupported;
+    if (centeredBelowHips && betweenLegsStanceSupported || temporalBetweenLegsSupported || wideStanceBetweenLegsSupported || depthBandBetweenLegsSupported) {
       addIfDistinct(found, { move: "between-the-legs", startMs: a.timeMs, endMs: c.timeMs,
         confidence: clamp(0.55 + quality(window) * 0.3 + Math.min(displacement, 1) * 0.15),
-        evidence: ["measured ball endpoints crossed the body centerline", "interpolated crossing point entered the region between the knees and below the hips",
-          `a controlling wrist was visible in the leg corridor for ${(legCorridorControlRatio * 100).toFixed(0)}% of the transfer`] });
-    } else if (throughHipBand || throughLegRegion) {
+        evidence: ["measured ball endpoints crossed the body centerline", "crossing point stayed between the projected knees and below the hips",
+          `normalized knee spread remained wide at ${kneeSpreadHipWidths.toFixed(2)} hip widths`,
+          `a controlling wrist was visible in the leg corridor for ${(legCorridorControlRatio * 100).toFixed(0)}% of the transfer`,
+          `measured ball occupied the leg corridor for ${(legCorridorBallRatio * 100).toFixed(0)}% of the transfer`,
+          ...(depthBandBetweenLegsSupported ? ["wrist depth crossed the between-the-legs depth band"] : [])] });
+    } else if (throughHipBand || (throughLegRegion || centeredBelowHips) &&
+      (projectedBehindDepthSupported || !wristDepths.length)) {
       addIfDistinct(found, { move: "behind-the-back", startMs: a.timeMs, endMs: c.timeMs,
         confidence: clamp(0.48 + quality(window) * 0.3 + Math.min(displacement, 1) * 0.17),
-        evidence: throughLegRegion
+        evidence: [...(centeredBelowHips && !throughLegRegion && !throughHipBand
+          ? ["measured ball endpoints crossed behind the body", "crossing point passed below the projected knee line",
+            `normalized knee spread remained narrow at ${kneeSpreadHipWidths.toFixed(2)} hip widths`, "wrist depth stayed behind the crossover depth boundary"]
+          : throughLegRegion
           ? ["measured ball endpoints crossed behind the body", "crossing point entered the projected leg region without sustained wrist control in that corridor"]
-          : ["measured ball endpoints crossed at hip height", "crossing point stayed in the narrow hip band", "trajectory avoided the between-knee region"] });
+          : ["measured ball endpoints crossed at hip height", "crossing point stayed in the narrow hip band", "trajectory avoided the between-knee region"]),
+          `normalized knee spread ${kneeSpreadHipWidths.toFixed(2)} hip widths`,
+          `leg-corridor wrist/ball support ${(legCorridorControlRatio * 100).toFixed(0)}%/${(legCorridorBallRatio * 100).toFixed(0)}%`] });
     } else if (nearHands < width * config.handProximityHipWidths && crossoverDepthSupported) {
       const confidence = clamp(0.45 + displacement * 0.18 + quality(window) * 0.25);
       addIfDistinct(found, { move: "crossover", startMs: a.timeMs, endMs: c.timeMs, confidence,
         evidence: ["ball crossed the hip centerline", `normalized lateral travel ${displacement.toFixed(2)}`, "ball remained near a wrist",
-          wristDepths.length ? "a controlling wrist stayed in front of the hips" : "pose depth was unavailable; lateral anatomy was used"] });
+          wristDepths.length ? "a controlling wrist stayed in front of the hips" : "pose depth was unavailable; lateral anatomy was used",
+          `normalized knee spread ${kneeSpreadHipWidths.toFixed(2)} hip widths`,
+          `leg-corridor wrist/ball support ${(legCorridorControlRatio * 100).toFixed(0)}%/${(legCorridorBallRatio * 100).toFixed(0)}%`] });
     }
   }
 
@@ -300,6 +361,13 @@ export function detectMoves(observations: MotionObservation[], config: MoveDetec
       observation.timeMs - lastCrossoverTransferMs < config.poseTransferCooldownMs ||
       wristInKneeCorridor(observation, activeHand)) continue;
     const width = torsoWidth(observation);
+    const kneeSpreadHipWidths = Math.abs(observation.leftKnee.x - observation.rightKnee.x) / width;
+    const recentKneeSpreadHipWidths = Math.max(...usable.slice(0, index + 1)
+      .filter((candidate) => observation.timeMs - candidate.timeMs <= 150)
+      .map((candidate) => Math.abs(candidate.leftKnee.x - candidate.rightKnee.x) / torsoWidth(candidate)));
+    const activeWrist = activeHand === "left" ? observation.leftWrist : observation.rightWrist;
+    const hipDepth = ((observation.leftHip.z ?? 0) + (observation.rightHip.z ?? 0)) / 2;
+    const wristDepthHipWidths = activeWrist.z === undefined ? null : (activeWrist.z - hipDepth) / width;
     const previousBallOffset = (previousObservation.ball!.x - centerX(previousObservation)) / width;
     const currentBallOffset = (observation.ball!.x - centerX(observation)) / width;
     const crossedBody = Math.sign(previousBallOffset) !== Math.sign(currentBallOffset) &&
@@ -309,9 +377,25 @@ export function detectMoves(observations: MotionObservation[], config: MoveDetec
     const confirmations = controllingHands.slice(index).filter((hand, relativeIndex) =>
       usable[index + relativeIndex].timeMs - observation.timeMs <= config.poseTransferConfirmationMs && hand === activeHand).length;
     if (confirmations < 2) continue;
-    addIfDistinct(found, { move: "crossover", startMs: Math.max(0, observation.timeMs - 200), endMs: observation.timeMs + 200,
+    const frontOfBodyCrossover = wristDepthHipWidths === null ||
+      wristDepthHipWidths < config.poseTransferOutsideCorridorCrossoverMaximumWristDepthHipWidths;
+    const outsideCorridorBetweenLegs = wristDepthHipWidths !== null &&
+      wristDepthHipWidths >= config.poseTransferOutsideCorridorBetweenLegsMinimumWristDepthHipWidths &&
+      wristDepthHipWidths <= config.poseTransferOutsideCorridorBetweenLegsMaximumWristDepthHipWidths &&
+      kneeSpreadHipWidths >= config.lateralBetweenLegsMinimumKneeSpreadHipWidths;
+    const move: MoveDetection["move"] = kneeSpreadHipWidths >= config.betweenLegsVeryStrongKneeSpreadHipWidths ||
+      recentKneeSpreadHipWidths >= config.betweenLegsRecentExtremeKneeSpreadHipWidths || outsideCorridorBetweenLegs
+      ? "between-the-legs"
+      : frontOfBodyCrossover ? "crossover" : "behind-the-back";
+    addIfDistinct(found, { move, startMs: Math.max(0, observation.timeMs - 200), endMs: observation.timeMs + 200,
       confidence: clamp(0.48 + Math.min(observation.poseConfidence, observation.ballConfidence) * 0.3),
-      evidence: ["measured ball control changed between wrists", "receiving hand remained outside the knee corridor", "receiving hand control persisted"] });
+      evidence: ["measured ball control changed between wrists", "receiving hand remained outside the knee corridor", "receiving hand control persisted",
+        ...(move === "between-the-legs" ? ["wide stance and wrist depth supplied sparse-sampling between-the-legs evidence"] : []),
+        ...(move === "behind-the-back" ? ["receiving wrist stayed behind the outside-corridor crossover depth boundary"] : []),
+        `normalized knee spread ${kneeSpreadHipWidths.toFixed(2)} hip widths`,
+        ...(recentKneeSpreadHipWidths >= config.betweenLegsRecentExtremeKneeSpreadHipWidths
+          ? [`recent knee spread reached ${recentKneeSpreadHipWidths.toFixed(2)} hip widths`] : []),
+        wristDepthHipWidths === null ? "receiving wrist depth unavailable" : `receiving wrist depth ${wristDepthHipWidths.toFixed(2)} hip widths`] });
     lastCrossoverTransferMs = observation.timeMs;
   }
 

@@ -5,7 +5,7 @@ import { parseMoveLabelCsv, segmentMoveLabels } from "../lib/motion/moveLabelCsv
 import { parseMixedImportArgs } from "../scripts/import-mixed-validation.ts";
 import { resolveValidationObservationsDirectory, validationObservationPath } from "../lib/motion/validationObservations.ts";
 import { resolve } from "node:path";
-import { evaluateGates, parseMoveSelection, selectSplit, validateManifest } from "../lib/motion/validation.ts";
+import { evaluateGates, parseMoveSelection, selectSplit, validateAnalysisExport, validateManifest } from "../lib/motion/validation.ts";
 
 test("parses arbitrary validation source paths", () => {
   assert.deepEqual(parsePrepareArgs(["--input", "D:/clip.mov", "--id", "behind-01", "--move", "behind-the-back"]), { input: "D:/clip.mov", id: "behind-01", move: "behind-the-back", segmentSeconds: 20 });
@@ -67,6 +67,30 @@ test("validates split-aware manifests", () => {
   const manifest = { schemaVersion: 2, clips: [{ id: "a", sourceId: "s", segmentId: "001", cohort: "controlled", split: "holdout", observations: "a.json", expected: [] }] };
   assert.equal(validateManifest(manifest).clips[0].split, "holdout");
   assert.throws(() => validateManifest({ ...manifest, clips: [{ ...manifest.clips[0], sourceId: "" }] }));
+});
+
+test("rejects malformed source-of-truth labels and duplicate clips", () => {
+  const clip = { id: "a", sourceId: "s", segmentId: "001", cohort: "controlled", split: "calibration", observations: "a.json",
+    expected: [{ move: "crossover", startMs: 100, endMs: 200 }] };
+  assert.throws(() => validateManifest({ schemaVersion: 2, toleranceMs: -1, clips: [clip] }), /toleranceMs/);
+  assert.throws(() => validateManifest({ schemaVersion: 2, clips: [clip, { ...clip }] }), /Duplicate validation clip/);
+  assert.throws(() => validateManifest({ schemaVersion: 2, clips: [clip, { ...clip, id: "b" }] }), /Duplicate validation source\/segment/);
+  assert.throws(() => validateManifest({ schemaVersion: 2, clips: [{ ...clip, expected: [
+    { move: "crossover", startMs: 100, endMs: 300 },
+    { move: "behind-the-back", startMs: 250, endMs: 400 },
+  ] }] }), /Overlapping or unsorted/);
+  assert.throws(() => validateManifest({ schemaVersion: 2, clips: [{ ...clip, expected: [
+    { move: "unknown", startMs: 100, endMs: 200 },
+  ] }] }), /Invalid expected move/);
+});
+
+test("validates observation exports before tuning or evaluation", () => {
+  const observation = { timeMs: 0, poseConfidence: 0.8, ballConfidence: 0.7, ball: { x: 0.4, y: 0.6 } };
+  const data = { schemaVersion: 2, clip: { id: "clip-a" }, sampleIntervalMs: 100, observations: [observation], labels: [], result: null };
+  assert.equal(validateAnalysisExport(data, "clip-a").observations.length, 1);
+  assert.throws(() => validateAnalysisExport(data, "clip-b"), /belongs to/);
+  assert.throws(() => validateAnalysisExport({ ...data, observations: [observation, { ...observation, timeMs: 0 }] }), /out-of-order/);
+  assert.throws(() => validateAnalysisExport({ ...data, observations: [{ ...observation, ball: { x: 1.1, y: 0.5 } }] }), /ball position/);
 });
 
 test("validates optional detector capture metadata", () => {

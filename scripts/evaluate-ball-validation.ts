@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { evaluateBallIdentity, type BallIdentityMetrics, type BallOcclusionMetrics } from "../lib/motion/evaluateBall.ts";
-import { selectSplit, validateManifest, type AnalysisExport, type ValidationSplit } from "../lib/motion/validation.ts";
+import { selectSplit, validateAnalysisExport, validateManifest, type ValidationSplit } from "../lib/motion/validation.ts";
 import { resolveValidationObservationsDirectory, validationObservationPath } from "../lib/motion/validationObservations.ts";
 
 export type BallEvaluationArgs = {
@@ -112,7 +112,7 @@ export function evaluateBallValidation(args: BallEvaluationArgs) {
   const reports: EvaluatedClip[] = [];
   for (const { clip, manifestRoot, observationDirectory } of clipInputs) {
     try {
-      const data = JSON.parse(readFileSync(validationObservationPath(manifestRoot, clip, observationDirectory), "utf8")) as AnalysisExport;
+      const data = validateAnalysisExport(JSON.parse(readFileSync(validationObservationPath(manifestRoot, clip, observationDirectory), "utf8")), clip.id);
       const sidecarPath = resolve(manifestRoot, "labels", "ball", `${clip.id}.json`);
       let labels: unknown = data.ballLabels; let labelSource: "sidecar" | "embedded" = "embedded";
       if (existsSync(sidecarPath)) {

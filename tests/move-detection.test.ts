@@ -14,6 +14,18 @@ const frame = (timeMs: number, ballX: number, ballY = 0.62): MotionObservation =
 const detection = (move: MoveName, startMs: number, endMs: number, confidence: number): MoveDetection =>
   ({ move, startMs, endMs, confidence, evidence: [] });
 
+test("uses repeat-robust lateral transfer defaults", () => {
+  assert.equal(DEFAULT_MOVE_DETECTION_CONFIG.minimumLateralDurationMs, 500);
+  assert.equal(DEFAULT_MOVE_DETECTION_CONFIG.behindMaximumKneeSpreadHipWidths, 2.6);
+  assert.equal(DEFAULT_MOVE_DETECTION_CONFIG.betweenLegsVeryStrongKneeSpreadHipWidths, 2.68);
+  assert.equal(DEFAULT_MOVE_DETECTION_CONFIG.poseTransferBallProximityHipWidths, 1);
+  assert.equal(DEFAULT_MOVE_DETECTION_CONFIG.lateralCrossoverMaximumWristDepthHipWidths, -7);
+  assert.equal(DEFAULT_MOVE_DETECTION_CONFIG.poseTransferOutsideCorridorCrossoverMaximumWristDepthHipWidths, -5.8);
+  assert.equal(DEFAULT_MOVE_DETECTION_CONFIG.poseTransferOutsideCorridorBetweenLegsMaximumWristDepthHipWidths, -4);
+  assert.equal(DEFAULT_MOVE_DETECTION_CONFIG.poseTransferCooldownMs, 550);
+  assert.equal(DEFAULT_MOVE_DETECTION_CONFIG.betweenLegsRecentExtremeKneeSpreadHipWidths, 2.75);
+});
+
 test("detects a crossover with timestamps and evidence", () => {
   const moves = detectMoves([frame(0, 0.3), frame(250, 0.5, 0.35), frame(500, 0.7)]);
   const move = moves.find((candidate) => candidate.move === "crossover");
@@ -27,11 +39,28 @@ test("detects between-the-legs only when the middle sample is in the leg region"
   const controlled = (observation: MotionObservation): MotionObservation => ({
     ...observation,
     leftWrist: { x: 0.5, y: 0.62, visibility: 0.95 },
+    leftKnee: { x: 0.2, y: 0.75 }, rightKnee: { x: 0.8, y: 0.75 },
   });
   const moves = detectMoves([frame(0, 0.3), controlled(frame(250, 0.5, 0.62)), controlled(frame(500, 0.7, 0.62))]);
   assert.ok(moves.some((move) => move.move === "between-the-legs"));
   const outside = detectMoves([frame(0, 0.3), frame(250, 0.5, 0.3), frame(500, 0.7)]);
   assert.equal(outside.some((move) => move.move === "between-the-legs"), false);
+});
+
+test("retains temporal between-the-legs evidence when sparse samples interpolate the crossing too high", () => {
+  const controlled = (observation: MotionObservation): MotionObservation => ({
+    ...observation,
+    leftWrist: { x: 0.5, y: 0.62, visibility: 0.95 },
+    leftKnee: { x: 0.2, y: 0.75 }, rightKnee: { x: 0.8, y: 0.75 },
+  });
+  const moves = detectMoves([
+    controlled(frame(0, 0.3, 0.62)),
+    controlled(frame(250, 0.45, 0.44)),
+    controlled(frame(500, 0.7, 0.44)),
+  ]);
+  assert.ok(moves.some((move) => move.move === "between-the-legs"));
+  assert.equal(moves.some((move) => move.move === "behind-the-back"), false);
+  assert.ok(moves.find((move) => move.move === "between-the-legs")!.endMs <= 500);
 });
 
 test("abstains from a lateral crossover when both wrists stay shallow in pose depth", () => {
@@ -139,13 +168,47 @@ test("uses normalized knee spread to distinguish pose-supported transfers", () =
       leftWrist: { x: 0.44, y: 0.62, z: 0, visibility: 0.95 },
       rightWrist: { x: 0.7, y: 0.55, z: -0.2, visibility: 0.95 },
       leftHip: { x: 0.4, y: 0.48, z: 0 }, rightHip: { x: 0.6, y: 0.48, z: 0 },
-      leftKnee: { x: wideStance ? 0.34 : 0.42, y: 0.75 }, rightKnee: { x: wideStance ? 0.66 : 0.58, y: 0.75 } };
+      leftKnee: { x: wideStance ? 0.1 : 0.42, y: 0.75 }, rightKnee: { x: wideStance ? 0.9 : 0.58, y: 0.75 } };
     const confirmation = { ...destination, timeMs: 450 };
     return [source, destination, confirmation];
   };
   const poseOnly = { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10 };
   assert.ok(detectMoves(transfer(true), poseOnly).some((move) => move.move === "between-the-legs"));
   assert.ok(detectMoves(transfer(false), poseOnly).some((move) => move.move === "behind-the-back"));
+});
+
+test("keeps consecutive lateral repetitions that share a measured endpoint", () => {
+  const moves = detectMoves([
+    frame(0, 0.3, 0.49), frame(200, 0.4, 0.49), frame(400, 0.55, 0.49), frame(600, 0.7, 0.49),
+    frame(800, 0.55, 0.49), frame(1_000, 0.4, 0.49), frame(1_200, 0.3, 0.49),
+  ]);
+  assert.equal(moves.filter((move) => move.move === "behind-the-back").length, 2);
+});
+
+test("uses stance and wrist depth for a behind-the-back crossing below the projected knees", () => {
+  const behindDepth = (observation: MotionObservation): MotionObservation => ({
+    ...observation,
+    leftWrist: { ...observation.leftWrist, z: -0.25 }, rightWrist: { ...observation.rightWrist, z: -0.25 },
+    leftHip: { ...observation.leftHip, z: 0 }, rightHip: { ...observation.rightHip, z: 0 },
+  });
+  const moves = detectMoves([
+    behindDepth(frame(0, 0.3, 0.82)),
+    behindDepth(frame(250, 0.5, 0.82)),
+    behindDepth(frame(500, 0.7, 0.82)),
+  ]);
+  const behind = moves.find((move) => move.move === "behind-the-back");
+  assert.ok(behind);
+  assert.match(behind.evidence.join(" "), /below the projected knee line/);
+});
+
+test("uses a wide stance for a between-the-legs crossing below the projected knees", () => {
+  const wide = (observation: MotionObservation): MotionObservation => ({
+    ...observation,
+    leftKnee: { x: 0.2, y: 0.75 }, rightKnee: { x: 0.8, y: 0.75 },
+  });
+  const moves = detectMoves([wide(frame(0, 0.3, 0.82)), wide(frame(250, 0.5, 0.82)), wide(frame(500, 0.7, 0.82))]);
+  assert.ok(moves.some((move) => move.move === "between-the-legs"));
+  assert.equal(moves.some((move) => move.move === "behind-the-back"), false);
 });
 
 test("uses normalized wrist depth to distinguish a front-of-body crossover handoff", () => {
@@ -194,4 +257,92 @@ test("pose-supported crossover rejects one-frame wrist-control wobble", () => {
   ];
   const poseOnly = { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10 };
   assert.equal(detectMoves(wobble, poseOnly).some((move) => move.move === "crossover"), false);
+});
+
+test("uses a very wide stance to recover a sparse outside-corridor between-the-legs handoff", () => {
+  const wide = (observation: MotionObservation): MotionObservation => ({
+    ...observation,
+    leftKnee: { x: 0.23, y: 0.75 }, rightKnee: { x: 0.77, y: 0.75 },
+    leftWrist: { x: 0.32, y: 0.42 }, rightWrist: { x: 0.68, y: 0.42 },
+  });
+  const transfer = [
+    wide({ ...frame(0, 0.32, 0.42), ballSource: "detected" as const }),
+    wide({ ...frame(200, 0.68, 0.42), ballSource: "detected" as const }),
+    wide({ ...frame(350, 0.68, 0.42), ballSource: "detected" as const }),
+  ];
+  const poseOnly = { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10 };
+  const moves = detectMoves(transfer, poseOnly);
+  assert.ok(moves.some((move) => move.move === "between-the-legs"));
+  assert.equal(moves.some((move) => move.move === "crossover"), false);
+});
+
+test("does not turn an ordinary wide-stance crossover into between-the-legs", () => {
+  const ordinaryWide = (observation: MotionObservation): MotionObservation => ({
+    ...observation,
+    leftKnee: { x: 0.235, y: 0.75 }, rightKnee: { x: 0.765, y: 0.75 },
+    leftWrist: { x: 0.32, y: 0.42 }, rightWrist: { x: 0.68, y: 0.42 },
+  });
+  const transfer = [
+    ordinaryWide({ ...frame(0, 0.32, 0.42), ballSource: "detected" as const }),
+    ordinaryWide({ ...frame(200, 0.68, 0.42), ballSource: "detected" as const }),
+    ordinaryWide({ ...frame(350, 0.68, 0.42), ballSource: "detected" as const }),
+  ];
+  const moves = detectMoves(transfer, { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10 });
+  assert.ok(moves.some((move) => move.move === "crossover"));
+  assert.equal(moves.some((move) => move.move === "between-the-legs"), false);
+});
+
+test("can use an extreme stance immediately before a sparse outside-corridor handoff", () => {
+  const pose = (observation: MotionObservation, kneeLeft: number, kneeRight: number): MotionObservation => ({
+    ...observation,
+    leftKnee: { x: kneeLeft, y: 0.75 }, rightKnee: { x: kneeRight, y: 0.75 },
+    leftWrist: { x: 0.32, y: 0.42, z: -1.2 }, rightWrist: { x: 0.68, y: 0.42, z: -1.2 },
+  });
+  const moves = detectMoves([
+    pose({ ...frame(0, 0.32, 0.42), ballSource: "detected" as const }, 0.24, 0.76),
+    pose({ ...frame(100, 0.32, 0.42), ballSource: "detected" as const }, 0.21, 0.79),
+    pose({ ...frame(200, 0.68, 0.42), ballSource: "detected" as const }, 0.24, 0.76),
+    pose({ ...frame(350, 0.68, 0.42), ballSource: "detected" as const }, 0.24, 0.76),
+  ], { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10,
+    betweenLegsRecentExtremeKneeSpreadHipWidths: 2.8 });
+  const betweenLegs = moves.find((move) => move.move === "between-the-legs");
+  assert.ok(betweenLegs);
+  assert.match(betweenLegs.evidence.join(" "), /recent knee spread/);
+});
+
+test("uses wrist depth to classify outside-corridor handoffs across all three live moves", () => {
+  const transfer = (wristDepth: number, kneeLeft: number, kneeRight: number) => {
+    const pose = (observation: MotionObservation): MotionObservation => ({
+      ...observation,
+      leftHip: { ...observation.leftHip, z: 0 }, rightHip: { ...observation.rightHip, z: 0 },
+      leftKnee: { x: kneeLeft, y: 0.75 }, rightKnee: { x: kneeRight, y: 0.75 },
+      leftWrist: { x: 0.32, y: 0.42, z: wristDepth }, rightWrist: { x: 0.68, y: 0.42, z: wristDepth },
+    });
+    return [
+      pose({ ...frame(0, 0.32, 0.42), ballSource: "detected" as const }),
+      pose({ ...frame(200, 0.68, 0.42), ballSource: "detected" as const }),
+      pose({ ...frame(350, 0.68, 0.42), ballSource: "detected" as const }),
+    ];
+  };
+  const poseOnly = { ...DEFAULT_MOVE_DETECTION_CONFIG, lateralTravelHipWidths: 10 };
+  assert.ok(detectMoves(transfer(-1.2, 0.3, 0.7), poseOnly).some((move) => move.move === "crossover"));
+  assert.ok(detectMoves(transfer(-0.7, 0.3, 0.7), poseOnly).some((move) => move.move === "behind-the-back"));
+  assert.ok(detectMoves(transfer(-0.8, 0.23, 0.77), poseOnly).some((move) => move.move === "between-the-legs"));
+});
+
+test("aligns sparse lateral and pose evidence inside the between-the-legs wrist-depth band", () => {
+  const depthBand = (observation: MotionObservation): MotionObservation => ({
+    ...observation,
+    leftHip: { ...observation.leftHip, z: 0 }, rightHip: { ...observation.rightHip, z: 0 },
+    leftKnee: { x: 0.24, y: 0.75 }, rightKnee: { x: 0.76, y: 0.75 },
+    leftWrist: { x: 0.32, y: 0.42, z: -0.9 }, rightWrist: { x: 0.68, y: 0.42, z: -0.9 },
+  });
+  const moves = detectMoves([
+    depthBand({ ...frame(0, 0.3, 0.3), ballSource: "detected" as const }),
+    depthBand({ ...frame(250, 0.5, 0.3), ballSource: "detected" as const }),
+    depthBand({ ...frame(500, 0.7, 0.3), ballSource: "detected" as const }),
+  ]);
+  assert.ok(moves.some((move) => move.move === "between-the-legs"));
+  assert.equal(moves.some((move) => move.move === "behind-the-back"), false);
+  assert.ok(moves.find((move) => move.move === "between-the-legs")!.endMs <= 500);
 });

@@ -8,7 +8,7 @@ import type { OnlineBallTrackerConfig } from "../lib/motion/onlineBallTracker.ts
 import { replayBallTracking } from "../lib/motion/replayBallTracking.ts";
 import { assertUsableSampling } from "../lib/motion/sampling.ts";
 import { trackBallContinuity } from "../lib/motion/trackBall.ts";
-import { LIVE_MOVE_NAMES, selectSplit, validateManifest, type AnalysisExport, type ValidationSplit } from "../lib/motion/validation.ts";
+import { LIVE_MOVE_NAMES, selectSplit, validateAnalysisExport, validateManifest, type ValidationSplit } from "../lib/motion/validation.ts";
 
 function option(name: string, fallback?: string) {
   const index = process.argv.indexOf(name);
@@ -61,7 +61,7 @@ if (process.argv[1]?.endsWith("evaluate-repeatability.ts")) {
       try {
         const observationPath = resolve(runDirectory, `${clip.id}.json`);
         if (!existsSync(observationPath)) throw new Error(`Missing observations: ${observationPath}`);
-        const data = JSON.parse(readFileSync(observationPath, "utf8")) as AnalysisExport;
+        const data = validateAnalysisExport(JSON.parse(readFileSync(observationPath, "utf8")), clip.id);
         assertUsableSampling(data.observations, data.sampleIntervalMs, data.sampling);
         const observations = trackBallContinuity(trackerConfig ? replayBallTracking(data.observations, trackerConfig) : data.observations);
         const sidecarPath = resolve(dirname(manifestPath), "labels", "ball", `${clip.id}.json`);

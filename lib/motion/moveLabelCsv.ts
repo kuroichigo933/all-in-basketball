@@ -5,6 +5,8 @@ const MOVE_ALIASES: Record<string, MoveName> = {
   crossover: "crossover",
   "between-the-legs": "between-the-legs",
   "behind-the-back": "behind-the-back",
+  hesitation: "hesitation",
+  "in-and-out": "in-and-out",
 };
 
 export function parseMoveTimestamp(value: string) {
@@ -20,7 +22,7 @@ export function parseMoveTimestamp(value: string) {
 export function normalizeCsvMove(value: string): MoveName {
   const normalized = value.trim().toLowerCase().replaceAll("_", "-").replace(/\s+/g, "-");
   const move = MOVE_ALIASES[normalized];
-  if (!move) throw new Error(`Unsupported mixed-video move: ${value}`);
+  if (!move) throw new Error(`Unsupported move: ${value}`);
   return move;
 }
 

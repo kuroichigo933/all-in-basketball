@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { combineEvaluations, combineMoveConfusions, evaluateDetections, evaluateMoveConfusion } from "../lib/motion/evaluate.ts";
+import { combineEvaluations, combineMoveConfusions, evaluateDetections, evaluateMoveConfusion, matchDetections, matchMoveConfusions } from "../lib/motion/evaluate.ts";
 
 test("matches move name and timestamp with tolerance", () => {
   const metrics = evaluateDetections(
@@ -45,6 +45,21 @@ test("reports temporally aligned class substitutions separately from misses", ()
   assert.equal(report.spurious.hesitation, 1);
 });
 
+test("exposes the exact expected and actual indices for class substitutions", () => {
+  const expected = [
+    { move: "between-the-legs" as const, startMs: 1000, endMs: 1400 },
+    { move: "behind-the-back" as const, startMs: 3000, endMs: 3400 },
+  ];
+  const actual = [
+    { move: "crossover" as const, startMs: 1100, endMs: 1500, confidence: 0.8, evidence: [] },
+    { move: "behind-the-back" as const, startMs: 5000, endMs: 5400, confidence: 0.8, evidence: [] },
+  ];
+  const matches = matchMoveConfusions(expected, actual);
+  assert.deepEqual(matches.pairs, [{ expectedIndex: 0, actualIndex: 0 }]);
+  assert.deepEqual(matches.unmatchedExpected, [1]);
+  assert.deepEqual(matches.unmatchedActual, [1]);
+});
+
 test("matches rapid neighboring events one-to-one by nearest center and combines reports", () => {
   const report = evaluateMoveConfusion([
     { move: "crossover", startMs: 1000, endMs: 1200 },
@@ -57,4 +72,18 @@ test("matches rapid neighboring events one-to-one by nearest center and combines
   assert.equal(combined.matched.crossover?.crossover, 2);
   assert.equal(combined.matched["between-the-legs"]?.["between-the-legs"], 2);
   assert.deepEqual(combined.missed, {}); assert.deepEqual(combined.spurious, {});
+});
+
+test("maximizes rapid same-class matches before minimizing timing error", () => {
+  const expected = [
+    { move: "crossover" as const, startMs: 0, endMs: 100 },
+    { move: "crossover" as const, startMs: 400, endMs: 500 },
+  ];
+  const actual = [
+    { move: "crossover" as const, startMs: 350, endMs: 350, confidence: 0.8, evidence: [] },
+    { move: "crossover" as const, startMs: 0, endMs: 0, confidence: 0.8, evidence: [] },
+  ];
+  const matches = matchDetections(expected, actual, 300);
+  assert.equal(matches.pairs.length, 2);
+  assert.equal(evaluateDetections(expected, actual, 300).f1, 1);
 });

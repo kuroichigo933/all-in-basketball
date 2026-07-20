@@ -42,21 +42,25 @@ This entire source is a **calibration cohort**. Tracker changes and threshold se
 
 | Metric | Calibration result |
 |---|---:|
-| Segments / move labels | 5 / 71 |
-| Pose / measured-ball / tracked-ball coverage | 0.916418 / 0.887659 / 0.911540 |
-| Promoted combined-calibration ball F1 range | 0.772152-0.777070 |
-| Promoted combined-calibration ball F1 spread | 0.004918 (passes 0.03 diagnostic) |
-| Promoted combined-calibration move F1 range | 0.536170-0.538462 |
-| Promoted combined-calibration move F1 spread | 0.002291 (passes 0.03 diagnostic) |
-| Repeat-calibrated saved-config move F1 range | 0.551181-0.569106 |
-| Repeat-calibrated saved-config spread | 0.017925 (passes) |
-| Run-B saved-config precision / recall / F1 | 0.625000 / 0.492958 / 0.551181 |
+| Segments / source-reviewed move labels | 5 / 73 |
+| Current pose / measured-ball / tracked-ball coverage | 0.916418 / 0.840286-0.853222 / 0.899600-0.911540 |
+| Promoted combined-calibration ball precision range | 0.962025-0.974359 |
+| Promoted combined-calibration ball recall | 0.962025 |
+| Promoted combined-calibration ball F1 range | 0.962025-0.968153 |
+| Promoted combined-calibration ball F1 spread | 0.006128 (passes 0.03 diagnostic) |
+| Current live-three move precision / recall / F1 range | 0.914286-0.915493 / 0.876712-0.890411 / 0.895105-0.902778 |
+| Current crossover precision / recall / F1 range | 0.962963-1.000000 / 0.962963 / 0.962963-0.981132 |
+| Current between-the-legs precision / recall / F1 | 0.909091 / 0.833333 / 0.869565 |
+| Current behind-the-back precision / recall / F1 range | 0.818182-0.863636 / 0.818182-0.863636 / 0.818182-0.863636 |
 | Live three-move 95% gate | Failed |
 | Five-class release gate | Blocked |
+| Same-cohort 95% ball calibration target | Passed on both A/B exports |
 
 The predeclared ball-identity slice contains 23 visible boxes, one absent-ball negative, and one full occlusion. Adjacent-frame inspection found one box centered above the visible ball; the ignored local sidecar was corrected from decoded pixels before the final evaluation. Two runs of the latest defaults measured tracked precision/recall/F1 of 0.695652-0.739130 and raw F1 of 0.711111-0.755556. The absent frame contains raw candidates but no reliable player, so it remained a true negative instead of a false track. Candidate-oracle recall was 22/23 (0.956522) in both runs. The occluded timestamp matched a measured candidate, not a prediction.
 
-The final tracker records complete pre-association candidate snapshots, demotes tiny color/motion fragments, joins orange lobes split by a one-pixel seam, and weights full-ball components. Candidate snapshots retain color-neutral roundness, fill, size plausibility, local contrast, and model-box shape. After the appearance search, a focused 16-configuration dynamics search with a 0.53 move-F1 floor selected full measurement correction and 0.35 velocity correction on both exports. Combined tracked F1 rises to 0.772152-0.777070; controlled replay F1 reaches 0.785714. All five occlusion labels still attach to measurements and none preserve a prediction.
+The final tracker records complete pre-association candidate snapshots and applies a versioned 14-feature pose-relative candidate ranker trained from the human ball boxes. A 25-setting A/B search selected 0.75 ranker influence and a 0.85 immediate-recovery threshold. It rescues high-ranked candidates below the legacy raw-confidence floor and reports ranker-backed tracking confidence without changing raw provenance. Combined tracked ball F1 reaches 0.962025-0.968153, and one of five occlusion labels now preserves a prediction.
+
+The ranker fits 77/77 candidate-covered training frames and repeats 77/77 on the regenerated export, but leave-one-clip-out ranking is only 61/77. The ≥95% result is therefore an explicit same-cohort calibration milestone, not independent accuracy evidence. The next supplied video must remain untouched until this configuration is fixed.
 
 A subsequent six-configuration search applied the same appearance evidence to distant two-frame challenger ranking. Both A/B exports retained challenger appearance weight 0, so this seam remains available for a future learned appearance model but is not promoted as an accuracy gain.
 
@@ -64,7 +68,15 @@ A subsequent six-configuration search applied the same appearance evidence to di
 
 Browser exports can now target named ignored directories with `--output-dir`. `validation:repeatability` evaluates at least two distinct directories against one fixed saved move configuration, reports minimum/maximum/mean/spread for ball F1, candidate-oracle recall, and move F1, and fails its diagnostic when ball or move F1 spread exceeds 0.03 by default. This is a reproducibility diagnostic, not a release gate.
 
-The mixed-only appearance exports produce ball F1 0.739130-0.755556, while balanced controlled replay reaches 0.785714. Source-aware combined replay contains 79 visible labels and one absent label: promoted ball F1 is 0.772152-0.777070, candidate-oracle recall is 77/79 (0.974684), and the one absent label is rejected. Combined move F1 is 0.536170-0.538462. These runs reuse one controlled browser export and two mixed exports, so they are calibration stability evidence rather than independent holdout evidence.
+Source-aware combined replay contains 79 visible labels and one absent label. Both promoted A/B configurations localize 76/79 boxes: precision/recall/F1 are 0.974359/0.962025/0.968153 on A and 0.962025/0.962025/0.962025 on B. Candidate-oracle recall is 77/79 (0.974684), and the one absent label is rejected. Ranker-aware anatomy and temporal retuning produces live-three F1 0.836879 on A and 0.845070 on B. These are calibration stability results rather than independent holdout evidence.
+
+The rapid CSV blocks impose contiguous 500 ms labels. In the final four-second segment this yields eight behind-the-back labels, while the corrected ball trajectory contains five visible centerline-transfer/bounce cycles. The detector does not synthesize timer-based repetitions to match that cadence. This label-to-event-definition mismatch is a measured calibration limitation and prevents a defensible 95% move claim on this source without manual timestamp review.
+
+Before adjudication, `validation:audit-labels` found five bad rapid blocks and then 21 full-clip review anchors. Independent 10 FPS source inspection now covers all five segments and yields 73 manual labels. The latest audit leaves four clip-000 startup/retrieval anchors, three source-labeled rapid BTL repetitions without tracked-transition support, and one segment-boundary anchor. Clip 000 also has only 47.8% usable motion coverage. These remaining discrepancies are preserved as tracker/audit limitations rather than deleted to inflate accuracy.
+
+The annotation panel now supports exact 30 FPS frame stepping and frame-snapped event boundaries. Label exports are rejected until all intervals validate. Runtime validation of the manifest and every analysis export was then exercised against both A/B observation directories: all five clips processed in each run with zero integrity failures, reproducing live-three F1 of 0.836879 and 0.845070. This workflow improvement does not alter the labels or raise the accuracy result by itself.
+
+Ten-FPS decoded review sheets were generated locally and inspected independently of move predictions. The five rapid blocks were replaced in ignored, provenance-bearing sidecars: counts changed from 22 to 17 crossover events, 4 to 3 late between-the-legs events, 6 to 4 early between-the-legs events, 8 to 6 late behind-the-back events, and 8 to 4 final behind-the-back events. The A/B audit now reports exact transition-count agreement for all five revised groups. Broader decoded review then exposed stale sparse CSV intervals and visually real transfers outside inherited labels, so full-clip adjudication remains required.
 
 Reproduce the local workflow with:
 
@@ -83,6 +95,11 @@ npm run validation:tune-ball -- --manifest validation/manifest.json --additional
 npm run validation:tune-ball -- --manifest validation/manifest.json --additional-manifests validation/local/manifests/mixed-moves-01.json --observation-dirs-by-manifest validation/local/repeatability/appearance-a,validation/local/repeatability/appearance-b --tune-appearance --output validation/local/appearance-tuned-b.json
 npm run validation:tune-ball -- --manifest validation/manifest.json --additional-manifests validation/local/manifests/mixed-moves-01.json --observation-dirs-by-manifest validation/local/repeatability/appearance-a,validation/local/repeatability/appearance-b --tune-dynamics --minimum-move-f1 0.53 --output validation/local/dynamics-balanced-b.json
 npm run validation:tune-ball -- --manifest validation/manifest.json --additional-manifests validation/local/manifests/mixed-moves-01.json --observation-dirs-by-manifest validation/local/repeatability/appearance-a,validation/local/repeatability/appearance-b --tune-challenger --minimum-move-f1 0.53 --output validation/local/challenger-balanced-b.json
+python scripts/train-ball-candidate-ranker.py --dataset "validation/manifest.json=validation/local/repeatability/appearance-a" --dataset "validation/local/manifests/mixed-moves-01.json=validation/local/repeatability/appearance-a" --output lib/motion/models/calibrated-ball-candidate-ranker-v1.json
+npm run validation:tune-ball -- --manifest validation/manifest.json --additional-manifests validation/local/manifests/mixed-moves-01.json --observation-dirs-by-manifest validation/local/repeatability/appearance-a,validation/local/repeatability/appearance-b --tune-ranker --output validation/local/ranker-confidence-b.json
+npm run validation:tune -- --manifest validation/local/manifests/mixed-moves-01.json --observations-dirs validation/local/repeatability/appearance-a,validation/local/repeatability/appearance-b --ball-config validation/local/ranker-confidence-a.json --moves crossover,between-the-legs,behind-the-back --output validation/local/ranker-confidence-move-tuned.json
+npm run validation:tune -- --manifest validation/local/manifests/mixed-moves-01.json --observations-dirs validation/local/repeatability/appearance-a,validation/local/repeatability/appearance-b --ball-config validation/local/ranker-confidence-a.json --moves crossover,between-the-legs,behind-the-back --output validation/local/ranker-anatomy-move-tuned.json
+npm run validation:audit-labels -- --manifest validation/local/manifests/mixed-moves-01.json --observations-dirs validation/local/repeatability/appearance-a,validation/local/repeatability/appearance-b --ball-config validation/local/ranker-confidence-a.json
 python scripts/export-validation-observations.py --output-dir validation/local/repeatability/run-a --force mixed-moves-01-000
 npm run validation:repeatability -- --manifest validation/local/manifests/mixed-moves-01.json --runs validation/local/repeatability/run-a,validation/local/repeatability/run-b --config validation/local/repeat-robust-move-config.json
 ```
@@ -97,15 +114,15 @@ The current default pipeline produced:
 
 | Metric | Representative calibration result |
 |---|---:|
-| Visible labels localized by promoted replay | 44 / 56 |
-| Promoted replay precision / recall / F1 | 0.785714 / 0.785714 / 0.785714 |
+| Visible labels localized by promoted replay | 55 / 56 |
+| Promoted replay precision / recall / F1 | 0.982143 / 0.982143 / 0.982143 |
 | Regenerated run-A raw precision / recall / F1 | 0.781818 / 0.767857 / 0.774775 |
 | Occlusion track presence | 4 / 4 |
 | Occlusion prediction persistence | 0 / 4 |
 | Occlusion measured distractor locks | 4 / 4 |
 | True absent-ball labels | 0 |
 
-The original browser export concealed wrong-object tracking in 32 of the 56 visible adjudicated frames. Regenerated observations plus promoted appearance/dynamics replay reduce the controlled visible errors to 12/56, but the result is calibration data and still lacks black-ball and absent-ball coverage.
+The original browser export concealed wrong-object tracking in 32 of the 56 visible adjudicated frames. Regenerated observations plus the calibrated ranker reduce the controlled visible errors to 1/56, but the result is same-cohort calibration data and still lacks black-ball and absent-ball coverage.
 
 The calibration labels can now be reproduced as a local YOLO detector package with `validation:ball-dataset`, including multiple calibration manifests without admitting holdout clips. The combined controlled-plus-mixed export contains 77 training-eligible positive frames, two tiny partial positives retained for audit, five excluded full occlusions, and one true absent-ball negative across three source IDs, two players, and two indoor setups. Its collection-readiness report still blocks on 20 total negatives from at least two sources, black-ball coverage, and verified hard-negative footage. It is a pipeline fixture, not a sufficient training or validation dataset, and readiness is deliberately separate from accuracy.
 
@@ -130,10 +147,14 @@ npm run validation:ball -- --manifest validation/manifest.json --split calibrati
 
 The controlled generated-camera smoke test with appearance-aware association ran at 8.1-8.2 analyzed frames per second, reported 98% measured and 99% tracked coverage, and continued advancing and tracking in expanded front-camera view. A later isolated development smoke with the promoted dynamics settings varied from 4.6-5.8 FPS and reported 99% measured and tracked coverage. Both pass the functional expanded-view smoke, but the observed 4.6-8.2 FPS range fails the approximate 10 FPS target. A production-server diagnostic was excluded because missing local Supabase configuration caused middleware failures.
 
+The current runtime removes the same-frame focused retry that could perform two synchronous object-model passes after a primary miss. It now alternates the primary and focused player crops across samples, performs at most one object pass per analyzed frame, skips object inference when no reliable player crop exists, and updates React metrics at 4 FPS independently of inference. The diagnostics display observed FPS, average/slowest inference milliseconds, and primary/focused/skipped pass counts. This is a structural optimization, not a new measured result; the 10 FPS gate remains failed until a representative phone rerun records at least 10 analyzed FPS without loss of ball-identity quality.
+
 These are pipeline and coverage diagnostics only. A track existing in a frame does not prove that it belongs to the basketball. Identity accuracy requires independent ball boxes such as those evaluated above.
 
 ## Verification status
 
-The latest mixed-video implementation run passed 139/139 tests, strict TypeScript, the synthetic benchmark, and the production build. All named browser observation exports used in the report passed the sampling-cadence gates; ball-annotation schedule/metadata and expanded live-camera smokes passed. Synthetic detector runtime and unit fixtures are useful regressions but are not real-video accuracy evidence.
+The latest mixed-video batch added full-clip coverage auditing, timestamp-level substitution diagnostics, worst-run-first configuration selection, bounded wrist-depth anatomy, and a 150 ms recent-stance feature for sparse handoffs. Its final verification passed 186/186 tests, strict TypeScript, the synthetic benchmark, and the production build. All named browser observation exports used in the report passed schema, identity, ordering, coordinate, and sampling-cadence gates. Synthetic detector runtime and unit fixtures are useful regressions but are not real-video accuracy evidence.
 
-Latest documented mixed calibration run: 2026-07-16. Results apply only to the controlled frontal-view recordings described above.
+With the source-reviewed manifest, identity-safe tracker, and promoted live defaults, the two saved replays produce TP/FP/FN of 64/6/9 and 65/6/8. Live-three precision is 0.914286-0.915493, recall is 0.876712-0.890411, and F1 is 0.895105-0.902778; F1 spread is 0.007673 and passes the 0.03 repeatability diagnostic. Worst-run-first tuning prevents a stronger replay from hiding a weaker one. A move-favoring tracker reached F1 0.855172 but was rejected because combined ball identity F1 fell from 0.962025 to 0.772152. The live-three 95% gate still fails.
+
+Latest documented mixed calibration run: 2026-07-20. Results apply only to the controlled frontal-view recording used for calibration; there is no untouched mixed-video holdout.

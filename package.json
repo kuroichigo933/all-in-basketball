@@ -14,6 +14,8 @@
     "validation:tune": "node --experimental-strip-types scripts/tune-validation.ts",
     "validation:tune-ball": "node --experimental-strip-types scripts/tune-ball-tracker.ts",
     "validation:repeatability": "node --experimental-strip-types scripts/evaluate-repeatability.ts",
+    "validation:audit-labels": "node --experimental-strip-types scripts/audit-move-labels.ts",
+    "validation:apply-reviewed-labels": "node --experimental-strip-types scripts/apply-reviewed-move-labels.ts",
     "validation:ball": "node --experimental-strip-types scripts/evaluate-ball-validation.ts",
     "validation:ball-dataset": "node --experimental-strip-types scripts/export-ball-dataset.ts",
     "ball-model:verify": "node --experimental-strip-types scripts/verify-ball-model-artifact.ts",

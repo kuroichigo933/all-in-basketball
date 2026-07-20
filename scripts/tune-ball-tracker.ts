@@ -6,7 +6,7 @@ import { combineEvaluations, evaluateDetections } from "../lib/motion/evaluate.t
 import { DEFAULT_ONLINE_BALL_TRACKER_CONFIG, type OnlineBallTrackerConfig } from "../lib/motion/onlineBallTracker.ts";
 import { replayBallTracking } from "../lib/motion/replayBallTracking.ts";
 import { trackBallContinuity } from "../lib/motion/trackBall.ts";
-import { LIVE_MOVE_NAMES, selectSplit, validateManifest, type AnalysisExport } from "../lib/motion/validation.ts";
+import { LIVE_MOVE_NAMES, selectSplit, validateAnalysisExport, validateManifest } from "../lib/motion/validation.ts";
 import { resolveValidationObservationsDirectory, validationObservationPath } from "../lib/motion/validationObservations.ts";
 
 function option(name: string, fallback: string) {
@@ -165,7 +165,7 @@ if (process.argv[1]?.endsWith("tune-ball-tracker.ts")) {
   const datasetInputs = manifestPaths.length > 1 ? clipInputs : observationsDirectories.flatMap((observationsDirectory) =>
     clipInputs.map((input) => ({ ...input, observationDirectory: observationsDirectory })));
   const datasets = datasetInputs.map(({ clip, manifestRoot, toleranceMs, observationDirectory }) => {
-    const observations = (JSON.parse(readFileSync(validationObservationPath(manifestRoot, clip, observationDirectory), "utf8")) as AnalysisExport).observations;
+    const observations = validateAnalysisExport(JSON.parse(readFileSync(validationObservationPath(manifestRoot, clip, observationDirectory), "utf8")), clip.id).observations;
     if (observations.some((observation) => !Array.isArray(observation.ballCandidates))) throw new Error(`${clip.id} has no complete candidate snapshots.`);
     const sidecarPath = resolve(manifestRoot, "labels", "ball", `${clip.id}.json`);
     if (!existsSync(sidecarPath)) throw new Error(`Missing ball labels: ${sidecarPath}`);

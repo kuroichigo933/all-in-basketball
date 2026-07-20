@@ -54,8 +54,8 @@ export const DEFAULT_ONLINE_BALL_TRACKER_CONFIG: Readonly<OnlineBallTrackerConfi
   associationSizeWeight: 0.15,
   associationAppearanceWeight: 0.3,
   challengerAppearanceWeight: 0,
-  identityQualityWeight: 0,
-  identityOverrideMinimumConfidence: 2,
+  identityQualityWeight: 0.75,
+  identityOverrideMinimumConfidence: 0.85,
   measurementCorrectionGain: 1,
   velocityCorrectionGain: 0.35,
 };
@@ -84,6 +84,9 @@ const identityQuality = (measurement: BallMeasurement, config: OnlineBallTracker
   const weight = clamp(config.identityQualityWeight, 0, 1);
   return measurementQuality(measurement) * (1 - weight) + (measurement.identityConfidence ?? 0.5) * weight;
 };
+
+const reportedConfidence = (measurement: BallMeasurement, config: OnlineBallTrackerConfig) =>
+  Math.max(measurement.confidence, (measurement.identityConfidence ?? 0) * clamp(config.identityQualityWeight, 0, 1));
 
 const sizeContinuity = (measurement: BallMeasurement, trackedSize: number | null) => {
   if (!trackedSize || !measurement.apparentSize) return 0.5;
@@ -135,7 +138,9 @@ export class OnlineBallTracker {
 
   update(timeMs: number, measurements: BallMeasurement[], acceptMeasurements = true): OnlineBallTrack | null {
     if (!acceptMeasurements) measurements = [];
-    measurements = measurements.filter((measurement) => measurement.confidence >= minimumMeasurementConfidence[measurement.source]);
+    measurements = measurements.filter((measurement) =>
+      measurement.confidence >= minimumMeasurementConfidence[measurement.source] ||
+      (measurement.identityConfidence ?? 0) >= this.config.identityOverrideMinimumConfidence);
     if (!this.point) {
       const first = [...measurements].filter((measurement) => sourceReliability[measurement.source] > 0)
         .sort((a, b) => identityQuality(b, this.config) - identityQuality(a, this.config))[0];
@@ -156,8 +161,10 @@ export class OnlineBallTracker {
           const speed = Math.hypot(velocity.x, velocity.y); const scale = speed > this.maxSpeedPerSecond ? this.maxSpeedPerSecond / speed : 1;
           this.point = { ...coherent.measurement.point }; this.velocity = { x: velocity.x * scale, y: velocity.y * scale };
           this.rememberSize(coherent.measurement);
-          this.pending = null; this.updatedAt = timeMs; this.measuredAt = timeMs; this.confidence = coherent.measurement.confidence;
-          return { ...coherent.measurement, point: { ...this.point }, predicted: false, measurementPoint: { ...coherent.measurement.point } };
+          this.pending = null; this.updatedAt = timeMs; this.measuredAt = timeMs;
+          this.confidence = reportedConfidence(coherent.measurement, this.config);
+          return { ...coherent.measurement, confidence: this.confidence, point: { ...this.point }, predicted: false,
+            measurementPoint: { ...coherent.measurement.point } };
         }
       }
       this.pending = { measurement: { ...first, point: { ...first.point } }, timeMs };
@@ -191,8 +198,8 @@ export class OnlineBallTracker {
       this.point = { ...identityOverride.point };
       this.velocity = { x: proposedVelocity.x * velocityScale, y: proposedVelocity.y * velocityScale };
       this.challenger = null; this.rememberSize(identityOverride); this.updatedAt = timeMs; this.measuredAt = timeMs;
-      this.confidence = identityOverride.confidence;
-      return { ...identityOverride, point: { ...this.point }, predicted: false,
+      this.confidence = reportedConfidence(identityOverride, this.config);
+      return { ...identityOverride, confidence: this.confidence, point: { ...this.point }, predicted: false,
         measurementPoint: { ...identityOverride.point } };
     }
 
@@ -205,8 +212,9 @@ export class OnlineBallTracker {
     if (immediateDetected) {
       this.point = { ...immediateDetected.point }; this.velocity = { x: 0, y: 0 }; this.challenger = null;
       this.rememberSize(immediateDetected);
-      this.updatedAt = timeMs; this.measuredAt = timeMs; this.confidence = immediateDetected.confidence;
-      return { ...immediateDetected, point: { ...this.point }, predicted: false, measurementPoint: { ...immediateDetected.point } };
+      this.updatedAt = timeMs; this.measuredAt = timeMs; this.confidence = reportedConfidence(immediateDetected, this.config);
+      return { ...immediateDetected, confidence: this.confidence, point: { ...this.point }, predicted: false,
+        measurementPoint: { ...immediateDetected.point } };
     }
 
     // Continuity alone can trap the tracker on a stable hand or clothing edge.
@@ -233,8 +241,9 @@ export class OnlineBallTracker {
         this.point = { ...coherent.measurement.point };
         this.velocity = { x: velocity.x * velocityScale, y: velocity.y * velocityScale };
         this.rememberSize(coherent.measurement);
-        this.challenger = null; this.updatedAt = timeMs; this.measuredAt = timeMs; this.confidence = coherent.measurement.confidence;
-        return { ...coherent.measurement, point: { ...this.point }, predicted: false,
+        this.challenger = null; this.updatedAt = timeMs; this.measuredAt = timeMs;
+        this.confidence = reportedConfidence(coherent.measurement, this.config);
+        return { ...coherent.measurement, confidence: this.confidence, point: { ...this.point }, predicted: false,
           measurementPoint: { ...coherent.measurement.point } };
       }
       if (elapsedMs > 250 || !distantIdentityCandidates.length) this.challenger = null;
@@ -251,8 +260,9 @@ export class OnlineBallTracker {
       this.point = { x: clamp(predicted.x + residual.x * this.config.measurementCorrectionGain, 0, 1),
         y: clamp(predicted.y + residual.y * this.config.measurementCorrectionGain, 0, 1) };
       this.rememberSize(selected.measurement);
-      this.updatedAt = timeMs; this.measuredAt = timeMs; this.confidence = selected.measurement.confidence;
-      return { ...selected.measurement, point: { ...this.point }, predicted: false, measurementPoint: { ...selected.measurement.point } };
+      this.updatedAt = timeMs; this.measuredAt = timeMs; this.confidence = reportedConfidence(selected.measurement, this.config);
+      return { ...selected.measurement, confidence: this.confidence, point: { ...this.point }, predicted: false,
+        measurementPoint: { ...selected.measurement.point } };
     }
     if (timeMs - this.measuredAt <= this.maxGapMs) {
       this.point = { x: clamp(predicted.x, 0, 1), y: clamp(predicted.y, 0, 1) }; this.updatedAt = timeMs;
