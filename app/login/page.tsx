@@ -4,7 +4,6 @@ import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import PublicTrialBanner from "@/components/PublicTrialBanner";
 
 function LoginForm() {
   const router = useRouter();
@@ -41,12 +40,9 @@ function LoginForm() {
 
 export default function Login() {
   return (
-    <>
-      <PublicTrialBanner />
-      <main className="relative flex min-h-screen items-center justify-center px-4 py-20">
-        <Link href="/" className="absolute left-4 top-6 text-sm text-muted hover:text-chalk sm:left-8">← Back to home</Link>
-        <Suspense><LoginForm /></Suspense>
-      </main>
-    </>
+    <main className="relative flex min-h-screen items-center justify-center px-4">
+      <Link href="/" className="absolute left-4 top-6 text-sm text-muted hover:text-chalk sm:left-8">← Back to home</Link>
+      <Suspense><LoginForm /></Suspense>
+    </main>
   );
 }

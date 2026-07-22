@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import PublicTrialBanner from "@/components/PublicTrialBanner";
 
 export default function Pricing() {
   const [user, setUser] = useState<any>(null);
@@ -45,9 +44,7 @@ export default function Pricing() {
   ];
 
   return (
-    <>
-      <PublicTrialBanner />
-      <main className="mx-auto max-w-5xl px-4 py-16 relative">
+    <main className="mx-auto max-w-5xl px-4 py-16 relative">
       <Link href={user ? "/dashboard" : "/"} className="absolute left-4 top-6 text-sm text-muted hover:text-chalk sm:left-4">← Back to {user ? "dashboard" : "home"}</Link>
       {notice && (
         <div className="mb-8 mt-6 rounded-card border border-game/40 bg-game/10 p-4 text-sm font-semibold text-chalk">
@@ -125,7 +122,6 @@ export default function Pricing() {
           <button className="text-sm text-muted underline hover:text-chalk">Manage my subscription</button>
         </form>
       )}
-      </main>
-    </>
+    </main>
   );
 }

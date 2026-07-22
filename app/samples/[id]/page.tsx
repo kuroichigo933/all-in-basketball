@@ -2,7 +2,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getSampleProgram, SAMPLE_PROGRAMS } from "@/lib/sample-programs";
-import PublicTrialBanner from "@/components/PublicTrialBanner";
 
 export function generateStaticParams() {
   return SAMPLE_PROGRAMS.map((p) => ({ id: p.id }));
@@ -13,9 +12,7 @@ export default function SampleProgramDetail({ params }: { params: { id: string }
   if (!program) notFound();
 
   return (
-    <>
-      <PublicTrialBanner />
-      <main className="mx-auto max-w-4xl px-4 py-12">
+    <main className="mx-auto max-w-4xl px-4 py-12">
         <Link href="/samples" className="text-sm text-muted hover:text-game">← All sample programs</Link>
 
         <header className="mt-4">
@@ -56,7 +53,6 @@ export default function SampleProgramDetail({ params }: { params: { id: string }
           <Link href={`/samples/${program.id}/play`} className="btn-game">Start practice</Link>
           <Link href="/samples" className="btn-ghost">Try another program</Link>
         </div>
-      </main>
-    </>
+    </main>
   );
 }

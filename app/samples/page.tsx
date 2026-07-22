@@ -1,13 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { SAMPLE_PROGRAMS } from "@/lib/sample-programs";
-import PublicTrialBanner from "@/components/PublicTrialBanner";
 
 export default function SamplesIndex() {
   return (
-    <>
-      <PublicTrialBanner />
-      <main className="mx-auto max-w-5xl px-4 py-12">
+    <main className="mx-auto max-w-5xl px-4 py-12">
         <Link href="/" className="text-sm text-muted hover:text-game">← Back home</Link>
         <header className="mt-4">
           <p className="text-xs uppercase tracking-[0.25em] text-game">Sample Programs</p>
@@ -33,7 +30,6 @@ export default function SamplesIndex() {
             </Link>
           ))}
         </div>
-      </main>
-    </>
+    </main>
   );
 }
