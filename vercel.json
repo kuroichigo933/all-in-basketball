@@ -1,4 +1,12 @@
 {
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "sigma.vercel.app" }],
+      "destination": "https://allinbasketball.app/$1",
+      "permanent": true
+    }
+  ],
   "crons": [
     { "path": "/api/cron/cleanup-reviews", "schedule": "0 5 * * *" }
   ]

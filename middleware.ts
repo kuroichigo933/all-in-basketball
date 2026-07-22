@@ -2,8 +2,18 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/", "/login", "/signup", "/pricing", "/auth", "/samples", "/how-it-works"];
+const CANONICAL_HOST = "allinbasketball.app";
+const LEGACY_HOSTS = new Set(["sigma.vercel.app"]);
 
 export async function middleware(request: NextRequest) {
+  const host = request.headers.get("host")?.split(":")[0].toLowerCase();
+  if (host && LEGACY_HOSTS.has(host)) {
+    const url = request.nextUrl.clone();
+    url.protocol = "https:";
+    url.host = CANONICAL_HOST;
+    return NextResponse.redirect(url, 308);
+  }
+
   let response = NextResponse.next({ request });
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
