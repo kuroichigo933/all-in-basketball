@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+const TRIAL_PERIOD_DAYS = 5;
 
 export async function POST(request: Request) {
   const supabase = createClient();
@@ -50,17 +51,19 @@ export async function POST(request: Request) {
     mode: "subscription",
     line_items: [{ price, quantity: 1 }],
     allow_promotion_codes: true,
-    // Don't force a card when nothing is owed (e.g. a 100%-off code) — the $0
-    // checkout still completes and creates the subscription, so the webhook
-    // grants the chosen tier without a payment method.
-    payment_method_collection: "always",
+    payment_method_collection: "if_required",
     client_reference_id: user.id,
     metadata: { supabase_user_id: user.id, plan },
     // Stamp the chosen plan onto the subscription so the webhook can grant the
-    // right tier from metadata — independent of price-ID env matching.
+    // right tier from metadata, independent of price-ID env matching.
     subscription_data: { 
       metadata: { supabase_user_id: user.id, plan },
-      trial_period_days: 3,
+      trial_period_days: TRIAL_PERIOD_DAYS,
+      trial_settings: {
+        end_behavior: {
+          missing_payment_method: "cancel",
+        },
+      },
     },
     success_url: `${SITE}/dashboard?upgraded=1`,
     cancel_url: `${SITE}/pricing`,

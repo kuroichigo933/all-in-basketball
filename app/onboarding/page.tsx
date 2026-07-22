@@ -23,7 +23,7 @@ export default async function Onboarding() {
   if (!user) redirect("/login");
   const { data: profile } = await supabase.from("profiles").select("onboarded, tier, role").eq("id", user.id).single();
   
-  if (profile?.tier === "free" && profile?.role !== "coach") redirect("/pricing");
+  if (profile?.tier === "free" && profile?.role !== "coach") redirect("/pricing?access=required");
   if (profile?.onboarded) redirect("/dashboard");
 
   return (

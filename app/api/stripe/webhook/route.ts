@@ -81,9 +81,9 @@ async function ensureProfessionalCredits(userId: string) {
   }
 }
 
-async function syncSubscription(sub: Stripe.Subscription) {
+async function syncSubscription(sub: Stripe.Subscription, fallbackUserId?: string | null) {
   const admin = createAdminClient();
-  const userId = await userIdFromCustomer(sub.customer as string);
+  const userId = (await userIdFromCustomer(sub.customer as string)) ?? fallbackUserId;
   if (!userId) return;
 
   const plan: Tier = planFromSub(sub);
@@ -134,21 +134,28 @@ export async function POST(request: Request) {
       if (session.mode === "payment" && session.metadata?.plan === "review_credit" && userId) {
         await addCredits(userId, 1);
       }
-      // Save customer mapping and upgrade profile immediately upon subscription checkout completion
+      // Save customer mapping and upgrade profile immediately upon subscription checkout completion.
       if (session.mode === "subscription" && userId && session.customer) {
         const admin = createAdminClient();
-        const rawPlan = (session.metadata?.plan as string) || "basic";
-        const plan: Tier = (rawPlan === "professional_yearly" || rawPlan === "professional") ? "professional" : "basic";
         const subId = typeof session.subscription === "string" 
           ? session.subscription 
           : (session.subscription?.id || "");
+
+        if (subId) {
+          const subscription = await stripe.subscriptions.retrieve(subId);
+          await syncSubscription(subscription, userId);
+          break;
+        }
+
+        const rawPlan = (session.metadata?.plan as string) || "basic";
+        const plan: Tier = (rawPlan === "professional_yearly" || rawPlan === "professional") ? "professional" : "basic";
           
         await admin.from("subscriptions").upsert({
           user_id: userId,
           stripe_customer_id: session.customer as string,
           stripe_subscription_id: subId,
           plan,
-          status: "active",
+          status: "trialing",
         });
         
         await admin.from("profiles").update({ tier: plan }).eq("id", userId);

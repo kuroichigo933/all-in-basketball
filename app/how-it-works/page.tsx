@@ -1,16 +1,18 @@
 import Link from "next/link";
 import DemoVideo from "./DemoVideo";
+import PublicTrialBanner from "@/components/PublicTrialBanner";
 
 export default function HowItWorks() {
   return (
     <main>
+      <PublicTrialBanner />
       <header className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-2 px-4">
         <Link href="/" className="display text-xl text-game">All In</Link>
         <nav className="flex items-center gap-3 sm:gap-4">
           <Link href="/how-it-works" className="text-sm font-semibold text-game">How it Works</Link>
           <Link href="/pricing" className="hidden text-sm font-semibold text-muted hover:text-chalk sm:inline">Pricing</Link>
           <Link href="/login" className="text-sm font-semibold text-muted hover:text-chalk">Log in</Link>
-          <Link href="/signup" className="btn-game !py-2 !px-4 text-sm">Sign up</Link>
+          <Link href="/signup" className="btn-game !py-2 !px-4 text-sm">Start trial</Link>
         </nav>
       </header>
 
@@ -23,7 +25,7 @@ export default function HowItWorks() {
           <DemoVideo />
         </div>
         <div className="mt-6">
-          <Link href="/signup" className="btn-game">Get started</Link>
+          <Link href="/signup" className="btn-game">Start 5-day free trial</Link>
         </div>
       </section>
     </main>

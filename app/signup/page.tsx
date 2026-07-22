@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import PublicTrialBanner from "@/components/PublicTrialBanner";
 
 export default function Signup() {
   const [name, setName] = useState("");
@@ -75,11 +76,13 @@ export default function Signup() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center px-4 py-12">
+    <>
+      <PublicTrialBanner />
+      <main className="relative flex min-h-screen items-center justify-center px-4 py-20">
       <Link href="/" className="absolute left-4 top-6 text-sm text-muted hover:text-chalk sm:left-8">← Back to home</Link>
       <form onSubmit={submit} className="card w-full max-w-md p-8">
         <h1 className="display text-2xl">Start your journey</h1>
-        <p className="mt-1 text-sm text-muted">Pick a plan and get to work.</p>
+        <p className="mt-1 text-sm text-muted">Choose a plan to try free for 5 days. No credit card required.</p>
         
         <div className="mt-6 space-y-4">
           <div><label className="label" htmlFor="name">Name</label>
@@ -144,10 +147,11 @@ export default function Signup() {
         
         {error && <p className="mt-3 text-sm text-game">{error}</p>}
         <button className="btn-game mt-6 w-full" disabled={busy}>
-          {busy ? "Processing…" : "Continue to Payment"}
+          {busy ? "Processing…" : "Start free 5-day trial"}
         </button>
         <p className="mt-4 text-center text-sm text-muted">Have an account? <Link className="text-game" href="/login">Log in</Link></p>
       </form>
-    </main>
+      </main>
+    </>
   );
 }

@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import PublicTrialBanner from "@/components/PublicTrialBanner";
 
 export default function Pricing() {
   const [user, setUser] = useState<any>(null);
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<"expired" | "required" | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -15,6 +17,9 @@ export default function Pricing() {
       setUser(data.user);
       setLoading(false);
     });
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("trial") === "expired") setNotice("expired");
+    if (params.get("access") === "required") setNotice("required");
   }, []);
 
   const plans = [
@@ -23,29 +28,39 @@ export default function Pricing() {
       price: billingCycle === "monthly" ? "$9.99" : "$99.99",
       period: billingCycle === "monthly" ? "/mo" : "/yr",
       saving: billingCycle === "yearly" ? "Save $20/yr" : null,
-      cta: "Go Basic",
+      cta: "Start Basic trial",
       plan: billingCycle === "yearly" ? "basic_yearly" : "basic",
-      points: ["Full drill library", "All follow-along programs"],
+      points: ["5-day free trial", "No credit card required", "Full drill library", "All follow-along programs"],
     },
     {
       name: "Professional",
       price: billingCycle === "monthly" ? "$24.99" : "$249.99",
       period: billingCycle === "monthly" ? "/mo" : "/yr",
       saving: billingCycle === "yearly" ? "Save $50/yr" : null,
-      cta: "Go Professional",
+      cta: "Start Professional trial",
       plan: billingCycle === "yearly" ? "professional_yearly" : "professional",
       featured: true,
-      points: ["Everything in Basic", "4 coach film reviews / month", "Priority session booking", "Early access to new content"],
+      points: ["5-day free trial", "No credit card required", "Everything in Basic", "4 coach film reviews / month", "Priority session booking", "Early access to new content"],
     },
   ];
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-16 relative">
+    <>
+      <PublicTrialBanner />
+      <main className="mx-auto max-w-5xl px-4 py-16 relative">
       <Link href={user ? "/dashboard" : "/"} className="absolute left-4 top-6 text-sm text-muted hover:text-chalk sm:left-4">← Back to {user ? "dashboard" : "home"}</Link>
+      {notice && (
+        <div className="mb-8 mt-6 rounded-card border border-game/40 bg-game/10 p-4 text-sm font-semibold text-chalk">
+          {notice === "expired"
+            ? "Your trial has ended. Pick a plan to continue training."
+            : "Pick a plan to unlock the training app."}
+        </div>
+      )}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mt-4">
         <div>
           <p className="text-xs uppercase tracking-[0.25em] text-game">Pricing</p>
           <h1 className="display mt-2 text-4xl md:text-5xl">Pick how far you want to take it</h1>
+          <p className="mt-3 text-sm font-semibold text-muted">Every plan starts with a 5-day free trial. No credit card required.</p>
         </div>
         
         {/* Toggle billing cycle */}
@@ -110,6 +125,7 @@ export default function Pricing() {
           <button className="text-sm text-muted underline hover:text-chalk">Manage my subscription</button>
         </form>
       )}
-    </main>
+      </main>
+    </>
   );
 }

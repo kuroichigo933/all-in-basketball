@@ -7,10 +7,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   
-  const { data: profile } = await supabase.from("profiles")
-    .select("full_name, role, onboarded, tier").eq("id", user.id).single();
+  const [{ data: profile }, { data: subscription }] = await Promise.all([
+    supabase.from("profiles")
+      .select("full_name, role, onboarded, tier").eq("id", user.id).single(),
+    supabase.from("subscriptions")
+      .select("status").eq("user_id", user.id).maybeSingle(),
+  ]);
     
-  if (profile?.tier === "free" && profile?.role !== "coach") redirect("/pricing");
+  if (profile?.tier === "free" && profile?.role !== "coach") {
+    const hasHadSubscription = !!subscription?.status && subscription.status !== "inactive";
+    redirect(hasHadSubscription ? "/pricing?trial=expired" : "/pricing?access=required");
+  }
   if (profile && !profile.onboarded) redirect("/onboarding");
 
   const fullName = profile?.full_name || user?.user_metadata?.full_name || "";
